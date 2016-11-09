@@ -51,7 +51,7 @@ class AlivecorFilter(SourceBlock):
         connect(self.mic, self.hilbert, self.pll, self.lowpass, self.bandreject, self)
 
 
-def decode_alivecor(signal, debug=False, fps=48000):
+def decode_alivecor(signal, fps=48000, debug=False):
     mic = ChunkDataSource(data=signal, batch_size=179200, sampling_rate=fps)
     alivecor = AlivecorFilter(mic)
     ecg = DataSink()
