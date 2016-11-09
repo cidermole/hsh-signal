@@ -15,7 +15,7 @@ def path_prefix(prefix, paths):
 
 ext = '.pyx' if USE_CYTHON else '.cpp'
 
-_unused_extensions = [
+extensions = [
     Extension("gr_pll.pll",
               ["gr_pll/pll" + ext] + path_prefix("gr_pll/gr/", [
                   "fast_atan2f.cc",
@@ -25,16 +25,26 @@ _unused_extensions = [
               libraries=[],
               language="c++",
               extra_compile_args=["-std=c++11", "-Igr_pll/gr/include"],
-              extra_link_args=[])]
+              extra_link_args=[]),
+    Extension("gr_firdes.firdes",
+              ["gr_firdes/firdes" + ext] + path_prefix("gr_firdes/gr/", [
+                  "firdes.cc",
+                  "window.cc",
+              ]),
+              libraries=[],
+              language="c++",
+              extra_compile_args=["-std=c++11", "-Igr_firdes/gr/include"],
+              extra_link_args=[])
+]
 
-#if USE_CYTHON:
-#    extensions = cythonize(extensions)
+if USE_CYTHON:
+    extensions = cythonize(extensions)
 
 setup(
     name='hsh-signal',
     version='0.0.1',
-    packages=['hsh_signal']
-#    ext_modules=extensions
+    packages=['hsh_signal', 'gr_pll', 'gr_firdes'],
+    ext_modules=extensions
 )
 
 # run as:
