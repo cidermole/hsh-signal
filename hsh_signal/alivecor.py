@@ -2,6 +2,9 @@ from __future__ import division
 
 from .filter import *
 
+import wave
+import numpy as np
+
 
 class ChunkDataSource(SourceBlock):
     """
@@ -68,4 +71,19 @@ def decode_alivecor(signal, fps=48000, debug=False):
     mic.stop()
 
     return ecg.data
+
+
+def load_raw_audio(file_name):
+    """Returns (sampling_rate, samples) where samples is an array of floats"""
+    wf = wave.open(file_name)
+    nframes = wf.getnframes()
+    buf = wf.readframes(nframes)
+    arr = np.frombuffer(buf, dtype=np.int16)
+    arr = arr.reshape((nframes, wf.getnchannels())).T
+
+    assert(wf.getsampwidth() == 2)  # for np.int16 to hold
+    #assert(wf.getframerate() == 48000)  # Android recs 48 kHz?!
+
+    raw_audio = arr[0] / float(2**15)  # assuming 16-bit wav file, left if stereo
+    return raw_audio, wf.getframerate()
 
