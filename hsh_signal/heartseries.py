@@ -32,6 +32,12 @@ class Series(object):
         with open(filename, 'wb') as fo:
             pickle.dump(self, fo, protocol=2)
 
+    def plot(self, plotter=None, dt=0.0):
+        import matplotlib.pyplot as plt
+
+        plotter = plt if plotter is None else plotter
+        plotter.plot(self.t - dt, self.x)
+
 
 class HeartSeries(Series):
     def __init__(self, samples, ibeats, fps, lpad=0):

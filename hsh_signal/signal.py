@@ -106,3 +106,11 @@ def localmax_pos(x):
     m = localmax(x)
     return [(t, x_t) for (t, x_t) in enumerate(x) if m[t]]
 
+
+def evenly_resample(times, series, target_fps=30.0):
+    L = (times[-1] - times[0])*target_fps
+    even_times = np.linspace(times[0], times[-1], L)
+    series2 = np.interp(even_times, times, series)
+    data = np.vstack((np.reshape(even_times, -1, 1), np.reshape(series2, -1, 1))).T
+    return data
+
