@@ -37,4 +37,4 @@ def parse_app_series(filename):
     #ax[2].plot(series_data['bcg_data'][:,0], series_data['bcg_data'][:,3])
     """
 
-    return ecg_ts, ecg_sig, ppg_data[:,0], ppg_data[:,1]
+    return ecg_ts, highpass(ecg_sig, ecg_fps), ppg_data[:,0], highpass(highpass(ppg_data[:,1], ppg_fps), ppg_fps)
