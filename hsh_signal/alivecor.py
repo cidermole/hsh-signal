@@ -39,11 +39,10 @@ class ChunkDataSource(SourceBlock):
 
 class AlivecorFilter(SourceBlock):
     """Demodulates an AliveCor ECG transmitted via FM audio signal."""
-    def __init__(self, mic):
+    def __init__(self, fps):
         super(AlivecorFilter, self).__init__()
-        self.sampling_rate = mic.sampling_rate
+        self.sampling_rate = fps
 
-        self.mic = mic
         self.hilbert = Hilbert()
         # roughly center on the observed 18.8 kHz carrier
         self.pll = PLL(loop_bw=1500, max_freq=22000, min_freq=16000, sampling_rate=self.sampling_rate)
@@ -53,14 +52,19 @@ class AlivecorFilter(SourceBlock):
 
         self.delay = self.hilbert.delay + self.lowpass.delay + self.bandreject.delay
 
-        connect(self.mic, self.hilbert, self.pll, self.lowpass, self.bandreject, self)
+        connect(self.hilbert, self.pll, self.lowpass, self.bandreject, self)
+
+    def put(self, x):
+        self.hilbert.put(x)
 
 
 def decode_alivecor(signal, fps=48000, debug=False):
+    alivecor = AlivecorFilter(fps)
     mic = ChunkDataSource(data=signal, batch_size=179200, sampling_rate=fps)
-    alivecor = AlivecorFilter(mic)
     ecg = DataSink()
-    alivecor.connect(ecg)
+    #mic.connect(alivecor)
+    #alivecor.connect(ecg)
+    connect(mic, alivecor, ecg)
 
     # push through all the data
     prev_t = time.time()
