@@ -114,16 +114,16 @@ def evenly_resample(times, series, target_fps=30.0):
     data = np.vstack((np.reshape(even_times, -1, 1), np.reshape(series2, -1, 1))).T
     return data
 
-def highpass(signal, fps, cf=0.5):
+def highpass(signal, fps, cf=0.5, tw=0.4):
     from gr_firdes import firdes
     cutoff_freq = cf
-    transition_width = 0.4
+    transition_width = tw
     taps = firdes.high_pass_2(1.0, fps, cutoff_freq, transition_width, 60.0)
     return np.convolve(np.pad(signal, (len(taps)//2,len(taps)//2), 'edge'), taps, mode='valid')
 
-def lowpass(signal, fps, cf=3.0):
+def lowpass(signal, fps, cf=3.0, tw=0.4):
     from gr_firdes import firdes
     cutoff_freq = cf
-    transition_width = 0.4
+    transition_width = tw
     taps = firdes.low_pass_2(1.0, fps, cutoff_freq, transition_width, 60.0)
     return np.convolve(np.pad(signal, (len(taps)//2,len(taps)//2), 'edge'), taps, mode='valid')
