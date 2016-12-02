@@ -51,6 +51,8 @@ class AlivecorFilter(SourceBlock):
         self.bandreject = Bandreject(low_cutoff_freq=40, high_cutoff_freq=60, transition_width=3, sampling_rate=self.sampling_rate)
         #Logger.debug('lowpass taps={}, bandreject taps={}'.format(self.lowpass._ntaps, self.bandreject._ntaps))
 
+        self.delay = self.hilbert.delay + self.lowpass.delay + self.bandreject.delay
+
         connect(self.mic, self.hilbert, self.pll, self.lowpass, self.bandreject, self)
 
 

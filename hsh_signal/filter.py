@@ -159,6 +159,7 @@ class Hilbert(FilterBlock):
         super(Hilbert, self).__init__()
         self.filter_imag = HilbertImag()
         self.filter_real = Delay(self.filter_imag.delay)  # delay so the two parts match up again
+        self.delay = self.filter_imag.delay
 
     def add(self, sample):
         """
