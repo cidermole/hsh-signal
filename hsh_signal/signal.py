@@ -120,3 +120,10 @@ def highpass(signal, fps, cf=0.5):
     transition_width = 0.4
     taps = firdes.high_pass_2(1.0, fps, cutoff_freq, transition_width, 60.0)
     return np.convolve(np.pad(signal, (len(taps)//2,len(taps)//2), 'edge'), taps, mode='valid')
+
+def lowpass(signal, fps, cf=3.0):
+    from gr_firdes import firdes
+    cutoff_freq = cf
+    transition_width = 0.4
+    taps = firdes.low_pass_2(1.0, fps, cutoff_freq, transition_width, 60.0)
+    return np.convolve(np.pad(signal, (len(taps)//2,len(taps)//2), 'edge'), taps, mode='valid')
