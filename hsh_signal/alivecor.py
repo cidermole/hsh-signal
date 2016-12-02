@@ -52,7 +52,11 @@ class AlivecorFilter(SourceBlock):
 
         self.delay = self.hilbert.delay + self.lowpass.delay + self.bandreject.delay
 
-        connect(self.hilbert, self.pll, self.lowpass, self.bandreject, self)
+        connect(self.hilbert, self.pll, self.lowpass, self.bandreject)  #, self - but no.
+
+    def connect(self, consumer):
+        # redirect the output
+        self.bandreject.connect(consumer)
 
     def put(self, x):
         self.hilbert.put(x)
