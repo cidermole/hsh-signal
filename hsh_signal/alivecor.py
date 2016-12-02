@@ -60,7 +60,8 @@ class AlivecorFilter(SourceBlock):
 
 def decode_alivecor(signal, fps=48000, debug=False):
     alivecor = AlivecorFilter(fps)
-    mic = ChunkDataSource(data=signal, batch_size=179200, sampling_rate=fps)
+    signal_padded = np.pad(signal, (0, alivecor.delay), mode='constant')  # pad with trailing zeros to force returning complete ECG
+    mic = ChunkDataSource(data=signal_padded, batch_size=179200, sampling_rate=fps)
     ecg = DataSink()
     #mic.connect(alivecor)
     #alivecor.connect(ecg)
@@ -76,7 +77,7 @@ def decode_alivecor(signal, fps=48000, debug=False):
         mic.poll()
     mic.stop()
 
-    return ecg.data
+    return ecg.data[alivecor.delay:]  # cut off leading filter delay (contains nonsense output)
 
 
 def load_raw_audio(file_name):
