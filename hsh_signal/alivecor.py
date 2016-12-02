@@ -6,37 +6,6 @@ import wave
 import numpy as np
 
 
-class ChunkDataSource(SourceBlock):
-    """
-    Fake Microphone signal source for testing. Provides a wav as audio.
-    """
-    def __init__(self, data, batch_size, sampling_rate=44100):
-        super(ChunkDataSource, self).__init__()
-        self.sampling_rate = sampling_rate
-        self._data = data
-        self._batch_size = batch_size
-        self._i = 0
-
-    def poll(self):
-        """Call this regulary in order to trigger the callback."""
-        # currently called with 30 fps in kivy -> could compute batch_size via sampling_rate
-        #Logger.debug('FakeMic.poll()')
-        before = time.time()
-        self.put(self._data[self._i:self._i+self._batch_size])
-        after = time.time()
-        #Logger.debug('FakeMic: poll() took {} sec'.format(after-before))
-        self._i += self._batch_size
-
-    def progress(self):
-        return float(self._i) / len(self._data) * 100.0
-
-    def start(self): pass
-    def stop(self): pass
-
-    def finished(self):
-        return self._i >= len(self._data)
-
-
 class AlivecorFilter(SourceBlock):
     """Demodulates an AliveCor ECG transmitted via FM audio signal."""
     def __init__(self, fps):
