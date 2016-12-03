@@ -20,6 +20,9 @@ class Series(object):
         amount = len(self.x) if amount is None else int(amount)
         return Series(np.pad(self.x, ((amount, amount),), mode='constant'), self.fps, lpad=amount)
 
+    def copy(self):
+        return Series(self.x, self.fps, self.lpad)
+
     def add_beats(self, ibeats):
         return HeartSeries(self.x, ibeats, self.fps, self.lpad)
 
