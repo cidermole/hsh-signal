@@ -29,6 +29,27 @@ class NoisyECG(object):
             print 'median_ibi={:.3f} -> bpm={:.1f}. len(beat_idxs)={} good_beat_fraction={:.2f}'.format(self.median_ibi, bpm, len(self.beat_idxs), self.good_beat_fraction)
         return bpm_ok and enough_beats and beat_hist_ok
 
+    def slice_good(self, sl, median_beat):
+        spectrum = np.abs(np.fft.fft(sl)**2)
+
+        # around 1/8, there is a bottom in a clean signal (see plot of mean beat spectrum)
+        lf_hf_db = 10.0 * np.log10(np.sum(spectrum[0:len(spectrum)//8]) / np.sum(spectrum[len(spectrum)//8:len(spectrum)//2]))
+
+        # the slice has similar power like the median_beat
+        power_ratio_db = 10.0 * np.log10(np.sum(sl**2) / np.sum(median_beat**2))
+
+        if False:
+            plt.plot(spectrum, c='r')
+            plt.plot(median_beat, c='k')
+            plt.plot(sl, c='b')
+            plt.title('slice_good() lf_hf={:.1f} dB  slice/median power_ratio_db={:.1f} dB'.format(lf_hf_db, power_ratio_db))
+            plt.show()
+
+        # the slice has similar power like the median_beat
+        power_similar = -6.0 < power_ratio_db < 6.0
+
+        return lf_hf_db > 5.0 and power_similar
+
     def beat_detect(self, debug=False):
         # Heuristics:
         # * found enough beats
@@ -71,7 +92,10 @@ class NoisyECG(object):
             plt.title('median ECG beat')
         cross_corrs = [cross_corr(sl, median_beat) for sl in ecg_slices]
 
-        good_loc_idxs = np.where(np.array(cross_corrs) > NoisyECG.GOOD_BEAT_THRESHOLD)[0]
+        spectrum_ok = np.array([self.slice_good(sl, median_beat) for sl in ecg_slices])
+        ccs_ok = np.array(cross_corrs) > NoisyECG.GOOD_BEAT_THRESHOLD
+
+        good_loc_idxs = np.where(ccs_ok & spectrum_ok)[0]
         if debug:
             [plt.plot(np.arange(len(ecg_slices[i]))/float(ecg.fps), ecg_slices[i]) for i in range(1,len(ecg_slices)) if i in good_loc_idxs]
             plt.title('all good ECG beats with rho > {:.2f}'.format(NoisyECG.GOOD_BEAT_THRESHOLD))
