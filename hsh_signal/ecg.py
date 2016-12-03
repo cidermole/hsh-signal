@@ -1,6 +1,6 @@
 import sys
 import numpy as np
-from signal import localmax_climb, slices, cross_corr
+from signal import localmax_climb, slices, cross_corr, hz2bpm
 import matplotlib.pyplot as plt
 
 
@@ -16,8 +16,21 @@ class NoisyECG(object):
 
         self.ecg = ecg
         self.beat_idxs, self.beat_times = self.beat_detect(debug=debug)
+        self.median_ibi = 0.0  #: median inter-beat interval in secs
+
+    def is_valid(self):
+        bpm = hz2bpm(1.0 / self.median_ibi)
+        bpm_ok = bpm >= 30.0 and bpm <= 150.0
+        return bpm_ok and len(self.beat_idxs) >= 5  # at least 5 good beats
 
     def beat_detect(self, debug=False):
+        # Heuristics:
+        # * found enough beats
+        # * median ibi is in plausible range (or even: some percentile of ibis is in plausible range)
+        # * histogram of beat correlations is plausible (lots of good correlation)
+        #
+        # Good beats have positive correlation, e.g. rho > 0.5 with the median beat.
+
         ecg = self.ecg
 
         ecg.x[:int(ecg.fps*5)] *= 0.0  # avoid the terrible swing
@@ -73,4 +86,5 @@ class NoisyECG(object):
             plt.show()
 
         #self.cross_corrs = np.array(cross_corrs)[good_loc_idxs]
+        self.median_ibi = median_ibi
         return beat_idxs, beat_times
