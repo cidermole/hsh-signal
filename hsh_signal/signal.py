@@ -5,6 +5,8 @@ import numpy as np
 
 def bpm2hz(f_bpm):
     return f_bpm / 60.0
+def hz2bpm(f_hz):
+    return f_hz * 60.0
 
 
 def hilbert_fc(x):

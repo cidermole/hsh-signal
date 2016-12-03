@@ -15,13 +15,19 @@ class NoisyECG(object):
         self.QRSdetection = QRSdetection
 
         self.ecg = ecg
-        self.beat_idxs, self.beat_times = self.beat_detect(debug=debug)
         self.median_ibi = 0.0  #: median inter-beat interval in secs
+        self.good_beat_fraction = 0.0  #: fraction of Kim-detected beats which correlate well with the median beat
+        self.beat_idxs, self.beat_times = self.beat_detect(debug=debug)
 
-    def is_valid(self):
-        bpm = hz2bpm(1.0 / self.median_ibi)
+    def is_valid(self, debug=False):
+        bpm = hz2bpm(1.0 / (self.median_ibi + 1e-6))
         bpm_ok = bpm >= 30.0 and bpm <= 150.0
-        return bpm_ok and len(self.beat_idxs) >= 5  # at least 5 good beats
+        enough_beats = len(self.beat_idxs) >= 5  # at least 5 good beats
+        beat_hist_ok = self.good_beat_fraction > 0.5  # meh. not good enough??
+
+        if debug:
+            print 'median_ibi={:.3f} -> bpm={:.1f}. len(beat_idxs)={} good_beat_fraction={:.2f}'.format(self.median_ibi, bpm, len(self.beat_idxs), self.good_beat_fraction)
+        return bpm_ok and enough_beats and beat_hist_ok
 
     def beat_detect(self, debug=False):
         # Heuristics:
@@ -74,17 +80,27 @@ class NoisyECG(object):
         beat_idxs = loc[good_loc_idxs]
         beat_times = beattime[good_loc_idxs]
 
+        self._beattime, self._cross_corrs = beattime, cross_corrs
+
         if debug:
-            fig, ax = plt.subplots(2, sharex=True)
-
-            ecg.plot(ax[0])
-            ax[0].scatter(beat_times, ecg.x[beat_idxs], c='r')
-
-            ax[1].stem(beattime, cross_corrs)
-
-            plt.title('beat correlation with median beat')
-            plt.show()
+            self.debug_plot()
 
         #self.cross_corrs = np.array(cross_corrs)[good_loc_idxs]
         self.median_ibi = median_ibi
+        self.good_beat_fraction = float(len(good_loc_idxs)) / len(cross_corrs)
         return beat_idxs, beat_times
+
+    def debug_plot(self):
+        ecg = self.ecg
+
+        beattime, cross_corrs = self._beattime, self._cross_corrs
+
+        fig, ax = plt.subplots(2, sharex=True)
+
+        ecg.plot(ax[0])
+        ax[0].scatter(self.beat_times, ecg.x[self.beat_idxs], c='r')
+
+        ax[1].stem(beattime, cross_corrs)
+
+        plt.title('beat correlation with median beat')
+        plt.show()
