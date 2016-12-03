@@ -135,3 +135,26 @@ def highpass_fft(signal, fps, cf=0.5, tw=0.4):
 def lowpass_fft(signal, fps, cf=3.0, tw=0.4):
     from filter import Lowpass, apply_filter
     return apply_filter(signal, Lowpass(cf, tw, fps))
+
+def cross_corr(x, y):
+    return np.sum(x * y) / np.sqrt(np.sum(x**2) * np.sum(y**2))
+
+def slices(arr, loc, hwin):
+    """Get slices from arr +/- hwin around indexes loc."""
+    ret = []
+    arrp = np.pad(arr, (hwin, hwin), mode='constant')  # zero-pad
+    locp = loc + hwin
+    for lp in locp:
+        ret.append(arrp[lp-hwin:lp+hwin+1])
+    return ret
+
+def localmax_climb(arr, loc, hwin):
+    """Climb from loc to the local maxima, up to hwin to the left/right."""
+    new_loc = []
+    arrp = np.pad(arr, (hwin, hwin), mode='constant')  # zero-pad
+    locp = loc + hwin
+    for lp in locp:
+        im = (lp-hwin) + np.argmax(arrp[lp-hwin:lp+hwin+1]) - hwin
+        new_loc.append(im)
+    return np.array(new_loc)
+
