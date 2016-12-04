@@ -1,6 +1,9 @@
 from __future__ import division
 
 from .filter import *
+from .signal import highpass_fft
+from .heartseries import Series, HeartSeries
+from .ecg import scrub_ecg, NoisyECG
 
 import wave
 import numpy as np
@@ -67,3 +70,17 @@ def load_raw_audio(file_name):
     raw_audio = arr[0] / float(2**15)  # assuming 16-bit wav file, left if stereo
     return raw_audio, wf.getframerate()
 
+
+def beatdet_alivecor(signal, fps=48000, lpad_t=0):
+    """decode, clean, and beatdetect AliveCor."""
+    #print 'ecg_fps=', ecg_fps
+    ecg_raw = decode_alivecor(signal, fps=fps)
+    ecg_dec_fps = 300
+    ecg = ecg_raw[::int(fps/ecg_dec_fps)]
+    ecg = highpass_fft(ecg, fps=ecg_dec_fps)
+    ecg = Series(ecg, fps=ecg_dec_fps, lpad=lpad_t*ecg_dec_fps)
+
+    scrubbed = scrub_ecg(ecg)
+    ne = NoisyECG(scrubbed)
+    ecg2 = HeartSeries(scrubbed.x, ne.beat_idxs, fps=ecg.fps, lpad=ecg.lpad)
+    return ecg2
