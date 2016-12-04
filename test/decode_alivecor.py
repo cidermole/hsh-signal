@@ -4,9 +4,6 @@ import matplotlib.pyplot as plt
 
 # test decode_alivecor
 
-f_center = 18.8e3
-f_shift = 100
-
 def stretch(T, f, fps=48000):
     # T in samples, NOT sec
     t = np.arange(T) / float(fps)
@@ -25,6 +22,10 @@ def chirp(T, f1, f2, fps=48000):
 plt.plot(chirp(5.0*30, 0.5, 3.0, fps=30))
 plt.show()
 """
+
+
+f_center = 18.8e3
+f_shift = 100
 
 sig = []
 stretches = [(1.5, 0), (0.1, 1), (0.2, -1), (0.3, 1), (0.4, -1), (1.0, 0)]

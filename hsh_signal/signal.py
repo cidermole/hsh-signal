@@ -152,6 +152,7 @@ def slices(arr, loc, hwin):
 
 def localmax_climb(arr, loc, hwin):
     """Climb from loc to the local maxima, up to hwin to the left/right."""
+    # TODO: should be called localmax_win, since it's not really climbing but looking in a window.
     new_loc = []
     arrp = np.pad(arr, (hwin, hwin), mode='constant')  # zero-pad
     locp = loc + hwin
