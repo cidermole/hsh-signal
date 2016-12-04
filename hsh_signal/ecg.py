@@ -2,6 +2,7 @@ import sys
 import numpy as np
 from signal import localmax_climb, slices, cross_corr, hz2bpm
 import matplotlib.pyplot as plt
+from .heartseries import Series
 
 
 class NoisyECG(object):
@@ -46,7 +47,7 @@ class NoisyECG(object):
             plt.show()
 
         # the slice has similar power like the median_beat
-        power_similar = -6.0 < power_ratio_db < 6.0
+        power_similar = -6.0 < power_ratio_db < 6.0  # 10 dB is a bit lenient. 6 dB would be better, but some baseline drift is larger.
 
         return lf_hf_db > 5.0 and power_similar
 
@@ -128,3 +129,45 @@ class NoisyECG(object):
 
         plt.title('beat correlation with median beat')
         plt.show()
+
+
+def baseline_energy(ecg):
+    """The lowest energy level in dB(1) (should be where ECG signal is)."""
+    sll = int(ecg.fps*1.0)  # slice len
+    idxs = np.arange(0, len(ecg.x)-sll, sll)
+    slices = [ecg.x[i:i+sll] for i in idxs]
+    #btt = idxs / float(ecg.fps)
+    energies = [10.0*np.log10(np.mean(sl**2)) for sl in slices]
+    energies_hist = list(sorted(energies))
+    return np.mean(energies_hist[:5])  # at least 5 clean ECG beats should be there, hopefully
+
+
+def scrub_ecg(ecg_in):
+    """return an ecg signal where noisy bits are set to zero"""
+    #ecg = ecg_in.copy()
+    THRESHOLD = 8.0  # dB above baseline_energy()
+    ecg = Series(ecg_in.x, ecg_in.fps, ecg_in.lpad)
+    #ecg.x = highpass(ecg.x, fps=ecg.fps, cf=2.0, tw=0.4)
+    baseline_db = baseline_energy(ecg)
+    hwin = int(ecg.fps*0.5)
+    check_centers = np.arange(hwin, len(ecg.x)-hwin+1, int(ecg.fps*0.1))  # more densely spaced than hwin
+    verdict = []
+    for c in check_centers:
+        sl = ecg.x[c-hwin:c+hwin+1]
+        energy_db = 10.0*np.log10(np.mean(sl**2))
+        verdict.append(energy_db < baseline_db + THRESHOLD)
+
+    good_locs = np.where(verdict)[0]
+    #flood_fill_width = int(ecg.fps*0.8)
+    flood_fill_width = 5  # cf. check_centers step size
+    for i in good_locs:
+        for j in range(max(i - flood_fill_width, 0), min(i + flood_fill_width + 1, len(verdict))):
+            verdict[j] = True
+
+    for c, v in zip(check_centers, verdict):
+        if not v:
+            ecg.x[c-hwin:c+hwin+1] *= 0.0  # zero the noisy bits
+
+    ecg.x = np.clip(ecg.x, np.mean(ecg.x) - 5*np.std(ecg.x), np.mean(ecg.x) + 5*np.std(ecg.x))
+
+    return ecg  #, check_centers, verdict
