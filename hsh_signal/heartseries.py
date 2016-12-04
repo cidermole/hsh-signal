@@ -65,8 +65,16 @@ class HeartSeries(Series):
         plotter = plt if plotter is None else plotter
         plotter.plot(self.t - dt, self.x)
 
+        self.scatter(plotter, dt)
+
+    def scatter(self, plotter=None, dt=0.0, tbeats2=None, c='r'):
+        import matplotlib.pyplot as plt
+
+        plotter = plt if plotter is None else plotter
+        tbeats2 = self.tbeats if tbeats2 is None else tbeats2
+
         beat_y = []
-        tbeats = self.tbeats + self.lpad / float(self.fps)
+        tbeats = tbeats2 + self.lpad / float(self.fps)
         for tb in tbeats:
             ib = tb * self.fps
             if ib < 1.0 or ib > len(self.x) - 2:
@@ -75,7 +83,7 @@ class HeartSeries(Series):
             xs = [int(np.floor(ib)), int(np.ceil(ib))]
             ys = self.x[xs]
             beat_y.append(np.interp([ib], xs, ys))
-        plotter.scatter(self.tbeats - dt, beat_y, c='r')
+        plotter.scatter(tbeats2 - dt, beat_y, c=c)
 
     def closest_beat(self, t):
         """find the ib of the beat closest to t"""
