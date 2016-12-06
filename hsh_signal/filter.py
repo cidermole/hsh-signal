@@ -210,6 +210,20 @@ class Highpass(FIRFilter):
         super(Highpass, self).__init__(high_pass_2(1, sampling_rate, cutoff_freq, transition_width, 60), sampling_rate)
 
 
+class Bandpass(FIRFilter):
+    """Realtime band-pass filter. Introduces a delay and outputs some initial invalid samples."""
+    def __init__(self, low_cutoff_freq, high_cutoff_freq, transition_width, sampling_rate):
+        """
+        :param low_cutoff_freq:    center of transition band (Hz)
+        :param high_cutoff_freq:   center of transition band (Hz)
+        :param transition_width:   width of transition band (Hz)
+        :param sampling_rate:      sampling rate (Hz)
+        """
+        # design filter impulse response
+        from gr_firdes.firdes import band_pass_2
+        super(Bandpass, self).__init__(band_pass_2(1, sampling_rate, low_cutoff_freq, high_cutoff_freq, transition_width, 60), sampling_rate)
+
+
 class Bandreject(FIRFilter):
     """Realtime band-reject filter. Introduces a delay and outputs some initial invalid samples."""
     def __init__(self, low_cutoff_freq, high_cutoff_freq, transition_width, sampling_rate):
