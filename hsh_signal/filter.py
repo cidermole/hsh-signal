@@ -155,12 +155,12 @@ class Hilbert(FilterBlock):
     Hilbert transform turns a series of real-valued samples into complex-valued (analytic) samples.
 
     Realtime variant.
-    Introduces a delay of 32 samples -- as opposed to hilbert_fc() which is not realtime.
-    Also, the first 32 output samples are invalid.
+    Introduces a delay of ntaps//2 samples -- as opposed to hilbert_fc() which is not realtime.
+    Also, the first ntaps//2 output samples are invalid.
     """
-    def __init__(self):
+    def __init__(self, ntaps=65):
         super(Hilbert, self).__init__()
-        self.filter_imag = HilbertImag()
+        self.filter_imag = HilbertImag(ntaps)
         self.filter_real = Delay(self.filter_imag.delay)  # delay so the two parts match up again
         self.delay = self.filter_imag.delay
 
