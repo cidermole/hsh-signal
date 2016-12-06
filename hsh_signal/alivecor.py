@@ -15,23 +15,24 @@ class AlivecorFilter(SourceBlock):
         super(AlivecorFilter, self).__init__()
         self.sampling_rate = fps
 
+        self.prefilter = Bandpass(low_cutoff_freq=17000, high_cutoff_freq=21000, transition_width=500, sampling_rate=self.sampling_rate)
         self.hilbert = Hilbert()
         # roughly center on the observed 18.8 kHz carrier
-        self.pll = PLL(loop_bw=1500, max_freq=22000, min_freq=16000, sampling_rate=self.sampling_rate)
+        self.pll = PLL(loop_bw=1500, max_freq=21000, min_freq=17000, sampling_rate=self.sampling_rate)
         self.lowpass = Lowpass(cutoff_freq=100, transition_width=5, sampling_rate=self.sampling_rate)
         self.bandreject = Bandreject(low_cutoff_freq=40, high_cutoff_freq=60, transition_width=3, sampling_rate=self.sampling_rate)
         #Logger.debug('lowpass taps={}, bandreject taps={}'.format(self.lowpass._ntaps, self.bandreject._ntaps))
 
-        self.delay = self.hilbert.delay + self.lowpass.delay + self.bandreject.delay
+        self.delay = self.prefilter.delay + self.hilbert.delay + self.lowpass.delay + self.bandreject.delay
 
-        connect(self.hilbert, self.pll, self.lowpass, self.bandreject)  #, self - but no.
+        connect(self.prefilter, self.hilbert, self.pll, self.lowpass, self.bandreject)  #, self - but no.
 
     def connect(self, consumer):
         # redirect the output
         self.bandreject.connect(consumer)
 
     def put(self, x):
-        self.hilbert.put(x)
+        self.prefilter.put(x)
 
 
 def decode_alivecor(signal, fps=48000, debug=False):
