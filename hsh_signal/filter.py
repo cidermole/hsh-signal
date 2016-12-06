@@ -89,7 +89,7 @@ class FIRFilter(FilterBlock):
     Realtime FIR filter.
 
     Introduces a delay that depends on the filter parameters.
-    Also, the first 2*delay output samples are invalid.
+    Also, the first delay output samples are invalid.
     """
 
     MODE_CONVOLVE = 1
@@ -141,10 +141,13 @@ class FIRFilter(FilterBlock):
 
 class HilbertImag(FIRFilter):
     """Part of the Hilbert implementation, turns real part into imaginary part."""
-    def __init__(self):
-        # gnuradio.filter.firdes.hilbert(ntaps=65)
-        hilbert_taps_65 = (0.0, -0.020952552556991577, 0.0, -0.022397557273507118, 0.0, -0.024056635797023773, 0.0, -0.02598116546869278, 0.0, -0.028240399435162544, 0.0, -0.030929960310459137, 0.0, -0.0341857448220253, 0.0, -0.03820759803056717, 0.0, -0.04330194741487503, 0.0, -0.04996378347277641, 0.0, -0.05904810503125191, 0.0, -0.07216990739107132, 0.0, -0.09278988093137741, 0.0, -0.1299058347940445, 0.0, -0.21650972962379456, 0.0, -0.6495291590690613, 0.0, 0.6495291590690613, 0.0, 0.21650972962379456, 0.0, 0.1299058347940445, 0.0, 0.09278988093137741, 0.0, 0.07216990739107132, 0.0, 0.05904810503125191, 0.0, 0.04996378347277641, 0.0, 0.04330194741487503, 0.0, 0.03820759803056717, 0.0, 0.0341857448220253, 0.0, 0.030929960310459137, 0.0, 0.028240399435162544, 0.0, 0.02598116546869278, 0.0, 0.024056635797023773, 0.0, 0.022397557273507118, 0.0, 0.020952552556991577, 0.0)
-        super(HilbertImag, self).__init__(np.array(hilbert_taps_65), None)
+    def __init__(self, ntaps=65):
+        """
+        :param ntaps   number of taps, made odd if necessary
+        """
+        ntaps += 1 - ntaps % 2  # ensure taps is odd
+        from gr_firdes.firdes import hilbert
+        super(HilbertImag, self).__init__(hilbert(ntaps), None)
 
 
 class Hilbert(FilterBlock):
