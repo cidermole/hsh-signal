@@ -1,9 +1,15 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os
+import re
+import time
+import pickle
 
-from hsh_signal.alivecor import decode_alivecor
-from signal import evenly_resample, highpass
-from heartseries import Series
+from .pickle import load_zipped_pickle
+from .alivecor import decode_alivecor
+from .signal import evenly_resample, highpass
+from .heartseries import Series
+from .ppg import ppg_beatdetect
 
 
 def parse_app_series(filename):
@@ -38,3 +44,63 @@ def parse_app_series(filename):
     """
 
     return ecg_ts, highpass(ecg_sig, ecg_fps), ppg_data[:,0], highpass(highpass(ppg_data[:,1], ppg_fps), ppg_fps)
+
+
+def sanitize(s, validchars):
+    return re.sub('[^' + validchars + ']','_', s)
+
+
+def server_series_filename(meta_data):
+    unixtime = int(time.mktime(meta_data['start_time'].timetuple()))
+    sane_app_id = sanitize(meta_data['app_info']['id'], '0123456789ABCDEF')
+    return '{}_{}_series.b'.format(unixtime, sane_app_id)
+
+
+class AppData:
+    """source agnostic loader, handles data from phones and server."""
+
+    CACHE_DIR = 'cache'
+
+    def __init__(self, meta_filename):
+        # , meta_filename=None, series_filename=None
+        try:
+            # app-saved metadata: normal pickle
+            meta_data = np.load(meta_filename)
+
+            dn = os.path.dirname(meta_filename)
+            series_filename = os.path.join(dn, meta_data['series_fname'])
+            series_data = np.load(series_filename)
+        except:
+            # maybe it's server-saved metadata
+            meta_data = load_zipped_pickle(meta_filename)
+
+            dn = os.path.dirname(meta_filename)
+            series_filename = os.path.join(dn, server_series_filename(meta_data))
+            series_data = load_zipped_pickle(series_filename)
+
+        self.meta_filename = meta_filename
+        self.meta_data = meta_data
+        self.series_data = series_data
+
+    def parse_ppg(self):
+        series_data = self.series_data
+
+        ppg_fps = 30.0
+        ppg_data = evenly_resample(series_data['ppg_data'][:,0], series_data['ppg_data'][:,1], target_fps=ppg_fps)
+        ts = ppg_data[:,0]
+        demean = highpass(highpass(ppg_data[:,1], ppg_fps), ppg_fps)
+
+        return Series(demean, fps=ppg_fps, lpad=ts[0])
+
+    def parse_beatdetect_ppg(self):
+        cache_file = os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_beatdet.b')
+        if os.path.exists(cache_file):
+            return np.load(cache_file)
+
+        ppg = ppg_beatdetect(self.parse_ppg())
+
+        if os.path.exists(AppData.CACHE_DIR):
+            with open(cache_file, 'wb') as fo:
+                pickle.dump(ppg, fo)
+
+        return ppg
