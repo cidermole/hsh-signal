@@ -5,7 +5,7 @@ import re
 import time
 import pickle
 
-from .pickle import load_zipped_pickle
+from .pickling import load_zipped_pickle
 from .alivecor import decode_alivecor
 from .signal import evenly_resample, highpass
 from .heartseries import Series
@@ -59,7 +59,7 @@ def server_series_filename(meta_data):
 class AppData:
     """source agnostic loader, handles data from phones and server."""
 
-    CACHE_DIR = 'cache'
+    CACHE_DIR = '.cache-nosync'
 
     def __init__(self, meta_filename):
         # , meta_filename=None, series_filename=None
@@ -82,7 +82,14 @@ class AppData:
         self.meta_data = meta_data
         self.series_data = series_data
 
-    def parse_ppg(self):
+    def ppg_fps(self):
+        ppg_data = self.series_data['ppg_data']
+        ts = ppg_data[:,0]
+        if len(ts) < 2:
+            return 0.0
+        return float(len(ts) - 1) / (ts[-1] - ts[0])
+
+    def ppg_parse(self):
         series_data = self.series_data
 
         ppg_fps = 30.0
@@ -92,14 +99,14 @@ class AppData:
 
         return Series(demean, fps=ppg_fps, lpad=ts[0])
 
-    def parse_beatdetect_ppg(self):
+    def ppg_parse_beatdetect(self):
         cache_file = os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_beatdet.b')
         if os.path.exists(cache_file):
             return np.load(cache_file)
 
-        ppg = ppg_beatdetect(self.parse_ppg())
+        ppg = ppg_beatdetect(self.ppg_parse())
 
-        if os.path.exists(AppData.CACHE_DIR):
+        if os.path.isdir(AppData.CACHE_DIR):
             with open(cache_file, 'wb') as fo:
                 pickle.dump(ppg, fo)
 

@@ -78,6 +78,11 @@ def audio_chirp_times(sig, fps):
     track = Series(sig, fps=fps)
     cd = AudioChirpDetector(track, debug=False)
     times, idxs = cd.chirp_times()
+    times = times[:4]
     print 'audio_chirp_times() times', times
-    assert len(idxs) == 4
+    #assert len(times) == 4
+
+    dtimes = np.diff(times)
+
+    assert np.abs(dtimes[0] - 0.5) < 1e-3 and np.abs(dtimes[2] - 0.5) < 1e-3  # sometimes last chirp missing?! but if it does, signal's crap.
     return times
