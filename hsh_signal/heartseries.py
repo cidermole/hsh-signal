@@ -145,14 +145,17 @@ class HeartSeries(Series):
 
         :return SNR in dB
         """
-        if len(self.ibeats) < 2:
+
+        #ibeats = self.ibeats
+        ibeats = self.ibeats[np.where(self.tbeats > 5.0)[0]]  # cut off leading noisy stuff...
+
+        if len(ibeats) < 2:
             return -20.0  # pretend bad SNR if not enough beats were found.
 
-        mean_ibi = np.mean(np.diff(self.ibeats))
-        slicez = slices(self.x, self.ibeats, hwin=int(mean_ibi/2))
+        mean_ibi = np.mean(np.diff(ibeats))
+        slicez = slices(self.x, ibeats, hwin=int(mean_ibi/2))
 
         if mode == 'neighbors':
-
             # actually this is log(corr) and slightly different from SNR.
             corrs = [cross_corr(a, b) for a, b in pairwise(slicez)]
             return 10.0 * np.log10(np.mean(corrs))
