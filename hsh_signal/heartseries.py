@@ -3,6 +3,9 @@ import numpy as np
 from bisect import bisect_left
 import pickle
 
+from .signal import slices, cross_corr
+from .iter import pairwise
+
 
 class Series(object):
     def __init__(self, samples, fps, lpad=0):
@@ -128,3 +131,38 @@ class HeartSeries(Series):
             ecg_ibs.append(ecg_ib)
         assert len(ppg_ibs) == len(ecg_ibs)
         return ppg_ibs, ecg_ibs
+
+    def snr(self, mode='median'):
+        return self.beat_snr(mode)
+
+    def beat_snr(self, mode='median'):
+        """
+        signal-to-noise ratio.
+        mode='neighbors': correlation with neighboring beats (returns range (-inf, inf) dB)
+        mode='median': correlation with median beat (returns range (-inf, 0) dB)  -- DO NOT USE.
+
+        generally, for bad signals, 'neighbors' is simply 2 dB less than 'median'.
+
+        :return SNR in dB
+        """
+        if len(self.ibeats) < 2:
+            return -20.0  # pretend bad SNR if not enough beats were found.
+
+        mean_ibi = np.mean(np.diff(self.ibeats))
+        slicez = slices(self.x, self.ibeats, hwin=int(mean_ibi/2))
+
+        if mode == 'neighbors':
+
+            # actually this is log(corr) and slightly different from SNR.
+            corrs = [cross_corr(a, b) for a, b in pairwise(slicez)]
+            return 10.0 * np.log10(np.mean(corrs))
+        elif mode == 'median':
+            # median value from each timepoint (not a single one of any of the beats)
+            median_beat = np.median(np.array(slicez), axis=0)
+            num = [np.sum(median_beat**2) for sl in slicez]
+            denom = [np.sum((sl - median_beat)**2) for sl in slicez]
+            sns = [(n/d if d != 0.0 else np.inf) for n,d in zip(num, denom)]
+            return 10.0 * np.log10(np.mean(sns))
+            # note: this is also affected by steep baseline wander (but so should be the zero-crossing time detection [test!]. so fine)
+        else:
+            raise ValueError('snr() unknown mode={}'.format(mode))

@@ -139,6 +139,7 @@ def lowpass_fft(signal, fps, cf=3.0, tw=0.4):
     return apply_filter(signal, Lowpass(cf, tw, fps))
 
 def cross_corr(x, y):
+    """normalized cross-correlation of the two signals of same length"""
     return np.sum(x * y) / np.sqrt(np.sum(x**2) * np.sum(y**2))
 
 def slices(arr, loc, hwin):
