@@ -2,7 +2,7 @@ from __future__ import division
 
 import numpy as np
 from .signal import filter_fft_ff
-import itertools
+from .iter import pairwise
 import time
 
 
@@ -293,13 +293,6 @@ def apply_filter(signal, filter, debug=False):
     source.stop()
 
     return sink.data[filter.delay:]  # cut off leading filter delay (contains nonsense output)
-
-
-def pairwise(iterable):
-    "s -> (s0,s1), (s1,s2), (s2, s3), ..."
-    a, b = itertools.tee(iterable)
-    next(b, None)
-    return zip(a, b)
 
 
 def connect(*args):
