@@ -97,7 +97,7 @@ class AppData:
         ts = ppg_data[:,0]
         demean = highpass(highpass(ppg_data[:,1], ppg_fps), ppg_fps)
 
-        return Series(demean, fps=ppg_fps, lpad=ts[0])
+        return Series(demean, fps=ppg_fps, lpad=-ts[0]*ppg_fps)
 
     def ppg_parse_beatdetect(self):
         cache_file = os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_beatdet.b')
