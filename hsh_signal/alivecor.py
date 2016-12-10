@@ -44,6 +44,8 @@ def decode_alivecor(signal, fps=48000, debug=False):
     #alivecor.connect(ecg)
     connect(mic, alivecor, ecg)
 
+    # to do: use apply_filter() instead of stuff below
+
     # push through all the data
     prev_t = time.time()
     mic.start()
