@@ -28,6 +28,7 @@
 //#include <gnuradio/io_signature.h>
 #include <math.h>
 #include <gnuradio/math.h>
+#include <complex>
 
 namespace gr {
   namespace analog {
@@ -90,6 +91,29 @@ namespace gr {
 
       while(size-- > 0) {
 	*optr++ = d_freq;
+
+	error = phase_detector(*iptr++, d_phase);
+
+	advance_loop(error);
+	phase_wrap();
+	frequency_limit();
+      }
+      return noutput_items;
+    }
+
+    int
+    pll_freqdet_cf_impl::work2_cc(int noutput_items,
+			      gr_vector_const_void_star &input_items,
+			      gr_vector_void_star &output_items)
+    {
+      const gr_complex *iptr = (gr_complex*)input_items[0];
+      gr_complex *optr = (gr_complex*)output_items[0];
+
+      float error;
+      int size = noutput_items;
+
+      while(size-- > 0) {
+	*optr++ = std::polar(1.0f, d_phase);
 
 	error = phase_detector(*iptr++, d_phase);
 

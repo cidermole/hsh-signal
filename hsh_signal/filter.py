@@ -80,8 +80,12 @@ class PLL(FilterBlock):
         self._pll = pll.PLL(loop_bw, max_freq, min_freq, sampling_rate)
 
     def batch(self, x):
-        """batch-process an array and return array of output values"""
+        """batch-process an array and return array of output values (frequency output)"""
         return self._pll.filter_cf(x)
+
+    def batch_vco(self, x):
+        """batch-process an array and return VCO output signal"""
+        return self._pll.filter_cc(x)
 
 
 class FIRFilter(FilterBlock):

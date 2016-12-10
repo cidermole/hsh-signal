@@ -74,6 +74,10 @@ namespace gr {
 			      gr_vector_const_void_star &input_items,
 			      gr_vector_void_star &output_items) = 0;
 
+      virtual int work2_cc(int noutput_items,
+			      gr_vector_const_void_star &input_items,
+			      gr_vector_void_star &output_items) = 0;
+
       virtual void set_loop_bandwidth(float bw) = 0;
       virtual void set_damping_factor(float df) = 0;
       virtual void set_alpha(float alpha) = 0;

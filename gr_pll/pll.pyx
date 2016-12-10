@@ -20,6 +20,10 @@ cdef extern from "<gnuradio/analog/pll_freqdet_cf.h>" namespace "gr::analog":
 			      gr_vector_const_void_star &input_items,
 			      gr_vector_void_star &output_items)
 
+        int work2_cc(int noutput_items,
+			      gr_vector_const_void_star &input_items,
+			      gr_vector_void_star &output_items)
+
 cdef extern from "<gnuradio/analog/pll_freqdet_cf.h>" namespace "gr::analog::pll_freqdet_cf":
     # static method from class pll_freqdet_cf
     #shared_ptr[pll_freqdet_cf] make(float loop_bw, float max_freq, float min_freq)
@@ -72,6 +76,19 @@ cdef class PLL:
         self._work(pll_in, pll_out)
         return pll_out
 
+    def filter_cc(self, x):
+        """
+        Local oscillator for AM demodulator (complex -> complex).
+        :param x: array of complex numbers (analytic input signal)
+        :returns: VCO output, as array of complex numbers
+        """
+
+        # wrap to the exact data types required by _work():
+        pll_in = np.array(x, dtype=np.complex64)
+        pll_out = np.zeros(len(pll_in), dtype=np.complex64)
+        self._work2_cc(pll_in, pll_out)
+        return pll_out
+
     def _work(self, input_items, output_items):
         """
         Outputs the tracked signal's frequency.
@@ -92,5 +109,26 @@ cdef class PLL:
         cdef vector[void*] output
         input.push_back(&input_view[0])
         output.push_back(&output_view[0])
-        #return self._ptr.get().work(len(output_items), input, output)
         return self._ptr.work(len(output_items), input, output)
+
+    def _work2_cc(self, input_items, output_items):
+        """
+        Outputs the VCO signal.
+
+        :param input_items: complex[float] array
+        :param output_items: complex[float] array
+        :return: len(output_items)
+
+        Example:
+
+        In [12]: input=np.array([1+1j,1+2j], dtype=np.complex64)
+        In [13]: output=np.zeros(2, dtype=np.float32)
+        In [15]: pll.work(input, output)
+        """
+        cdef complex64_t[:] input_view = input_items
+        cdef complex64_t[:] output_view = output_items
+        cdef vector[const void*] input
+        cdef vector[void*] output
+        input.push_back(&input_view[0])
+        output.push_back(&output_view[0])
+        return self._ptr.work2_cc(len(output_items), input, output)
