@@ -134,7 +134,8 @@ class AppData:
         return ppg
 
     def get_result(self):
-        """calls HS API /reclassify if necessary (if result not yet cached)."""
+        """calls HS API /reclassify if necessary (if result not yet cached).
+        :returns result dict with keys ['pred', 'filtered', 'idx']"""
         cache_file = os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_result.b')
         if os.path.exists(cache_file):
             return np.load(cache_file)
@@ -148,13 +149,34 @@ class AppData:
         return res
 
     def has_diagnosis(self):
-        return 'doctor' in self.meta_data and self.meta_data['doctor']['status'] != ''
+        if not 'doctor' in self.meta_data:
+            # no 'doctor' key: did not save any input, or old app version
+            return False
+
+        doctor = self.meta_data['doctor']
+
+        # directly selected "CVD" or "No CVD found"
+        if doctor['status'] != '': return True
+
+        # maybe a specific CVD was directly selected? (app UI should've selected "CVD" automatically...)
+        if self.cad_or_afib(): return True
+
+        return False
+
+    def cad_or_afib(self):
+        if not 'doctor' in self.meta_data: return False
+        doctor = self.meta_data['doctor']
+        if 'details' in doctor:
+            details = doctor['details']
+            if details['cad'] or details['afib']:
+                return True
+        return False
 
     def get_cvd_status(self):
         if not self.has_diagnosis():
             return None
         status = self.meta_data['doctor']['status']
-        if status == 'cvd':
+        if status == 'cvd' or self.cad_or_afib():
             return True
         elif status == 'healthy':
             return False
