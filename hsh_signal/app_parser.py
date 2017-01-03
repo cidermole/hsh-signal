@@ -23,9 +23,8 @@ def parse_app_series(filename):
     ecgt = audio_data[:,0][::int(48000/300)]
     ecg_fps = 300
 
-    ecg_delay = int(0.728 * ecg_fps)  # delay from decode_alivecor()
-    ecg_sig = ecg[ecg_delay:]
-    ecg_ts = ecgt[:-ecg_delay]  # delay is not included in timestamps, only in signal. but length must be the same.
+    ecg_sig = ecg
+    ecg_ts = ecgt
 
     #ecg_series = Series(ecg_sig)
     # variable time delay... grr.
