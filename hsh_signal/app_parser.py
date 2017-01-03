@@ -11,6 +11,26 @@ from .signal import evenly_resample, highpass
 from .heartseries import Series
 from .ppg import ppg_beatdetect
 
+import requests
+import json
+from .hsh_data import MyJSONEncoder
+
+
+def classify_results(meta_data, series_data):
+    post_data = {
+        'meta_data': json.dumps(meta_data, cls=MyJSONEncoder),
+        'series_data': json.dumps(series_data, cls=MyJSONEncoder)
+    }
+    response = requests.post('https://mlapi.heartshield.net/v2/reclassify', post_data)
+    if response.status_code != 200:
+        raise RuntimeError('requests.post() status code != 200: ' + response.text)
+
+    result_dict = json.loads(response.text)
+    prob, filtered, idx = [result_dict[k] for k in 'pred filtered idx'.split()]
+
+    #meta_fname = self.hs_data.put_result(meta_data, result_dict)
+    return result_dict
+
 
 def parse_app_series(filename):
     series_data = np.load(filename)
@@ -112,6 +132,20 @@ class AppData:
                 pickle.dump(ppg, fo)
 
         return ppg
+
+    def get_result(self):
+        """calls HS API /reclassify if necessary (if result not yet cached)."""
+        cache_file = os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_result.b')
+        if os.path.exists(cache_file):
+            return np.load(cache_file)
+
+        res = classify_results(self.meta_data, self.series_data)
+
+        if os.path.isdir(AppData.CACHE_DIR):
+            with open(cache_file, 'wb') as fo:
+                pickle.dump(res, fo)
+
+        return res
 
     def has_diagnosis(self):
         return 'doctor' in self.meta_data and self.meta_data['doctor']['status'] != ''
