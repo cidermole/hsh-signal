@@ -114,7 +114,7 @@ class AppData:
         return ppg
 
     def has_diagnosis(self):
-        has_doc = 'doctor' in self.meta_data and self.meta_data['doctor']['status'] != ''
+        return 'doctor' in self.meta_data and self.meta_data['doctor']['status'] != ''
 
     def get_cvd_status(self):
         if not self.has_diagnosis():
