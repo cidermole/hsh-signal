@@ -17,11 +17,13 @@ def parse_app_series(filename):
 
     audio_data = series_data['audio_data']
     ecg_raw = decode_alivecor(series_data['audio_data'][:,1])
+    #audio_fps = meta_data['audio_fps']  # no meta_data
+    audio_ts = series_data['audio_data'][:,0]
+    audio_fps = float(len(audio_ts) - 1) / (audio_ts[-1] - audio_ts[0])
 
-    # TODO: audio FPS from series_data
-    ecg = ecg_raw[::int(48000/300)]
-    ecgt = audio_data[:,0][::int(48000/300)]
     ecg_fps = 300
+    ecg = ecg_raw[::int(audio_fps/ecg_fps)]
+    ecgt = audio_data[:,0][::int(audio_fps/ecg_fps)]
 
     ecg_sig = ecg
     ecg_ts = ecgt
