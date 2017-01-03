@@ -111,3 +111,16 @@ class AppData:
                 pickle.dump(ppg, fo)
 
         return ppg
+
+    def has_diagnosis(self):
+        has_doc = 'doctor' in self.meta_data and self.meta_data['doctor']['status'] != ''
+
+    def get_cvd_status(self):
+        if not self.has_diagnosis():
+            return None
+        status = self.meta_data['doctor']['status']
+        if status == 'cvd':
+            return True
+        elif status == 'healthy':
+            return False
+        raise ValueError('unknown CVD status: {} in file {}'.format(status, self.meta_filename))
