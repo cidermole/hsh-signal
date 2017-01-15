@@ -11,7 +11,8 @@ class NoisyECG(object):
     def __init__(self, ecg, debug=False):
         """:param ecg: heartseries.Series"""
 
-        sys.path.append('/home/david/heartshield/ecg-beat-detector')
+        # needs package ecg-beat-detector
+        # imported here, to avoid loading the big matrices (~ 2 sec) otherwise
         from kimqrsdetector.kimqrsdetector import QRSdetection
         self.QRSdetection = QRSdetection
 
@@ -142,10 +143,10 @@ def baseline_energy(ecg):
     return np.mean(energies_hist[:5])  # at least 5 clean ECG beats should be there, hopefully
 
 
-def scrub_ecg(ecg_in):
+def scrub_ecg(ecg_in, THRESHOLD = 8.0):
     """return an ecg signal where noisy bits are set to zero"""
     #ecg = ecg_in.copy()
-    THRESHOLD = 8.0  # dB above baseline_energy()
+    #THRESHOLD = 8.0  # dB above baseline_energy()
     ecg = Series(ecg_in.x, ecg_in.fps, ecg_in.lpad)
     #ecg.x = highpass(ecg.x, fps=ecg.fps, cf=2.0, tw=0.4)
     baseline_db = baseline_energy(ecg)
