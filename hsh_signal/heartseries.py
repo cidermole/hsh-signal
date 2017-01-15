@@ -26,6 +26,9 @@ class Series(object):
     def copy(self):
         return Series(self.x, self.fps, self.lpad)
 
+    def slice(self, s):
+        return HeartSeries(self.x[s], self.ibeats[s], self.fps, self.lpad)
+
     def add_beats(self, ibeats):
         return HeartSeries(self.x, ibeats, self.fps, self.lpad)
 
@@ -44,12 +47,18 @@ class Series(object):
         plotter = plt if plotter is None else plotter
         plotter.plot(self.t - dt, self.x)
 
+    def stem(self, plotter=None, dt=0.0):
+        import matplotlib.pyplot as plt
+
+        plotter = plt if plotter is None else plotter
+        plotter.stem(self.t - dt, self.x)
+
 
 class HeartSeries(Series):
     def __init__(self, samples, ibeats, fps, lpad=0):
         # ibeats may still be float, despite the name
         super(HeartSeries, self).__init__(samples, fps, lpad=lpad)
-        ibeats = ibeats.flatten()
+        ibeats = np.array(ibeats).flatten()
         self.ibeats = np.array(ibeats)
         self.tbeats = (ibeats - lpad) / float(fps)
 
@@ -139,7 +148,7 @@ class HeartSeries(Series):
         """
         signal-to-noise ratio.
         mode='neighbors': correlation with neighboring beats (returns range (-inf, inf) dB)
-        mode='median': correlation with median beat (returns range (-inf, 0) dB)  -- DO NOT USE.
+        mode='median': correlation with median beat (returns range (-inf, 0) dB)  -- nope. can be >0 dB
 
         generally, for bad signals, 'neighbors' is simply 2 dB less than 'median'.
 
