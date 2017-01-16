@@ -16,4 +16,6 @@ cdef extern from "<gnuradio/filter/firdes.h>" namespace "gr::filter::firdes":
     # static methods from class firdes
     vector[float] high_pass_2(double gain, double sampling_freq, double cutoff_freq, double transition_width, double attenuation_dB, win_type window, double beta)
     vector[float] low_pass_2(double gain, double sampling_freq, double cutoff_freq, double transition_width, double attenuation_dB, win_type window, double beta)
+    vector[float] band_pass_2(double gain, double sampling_freq, double low_cutoff_freq, double high_cutoff_freq, double transition_width, double attenuation_dB, win_type window, double beta)
     vector[float] band_reject_2(double gain, double sampling_freq, double low_cutoff_freq, double high_cutoff_freq, double transition_width, double attenuation_dB, win_type window, double beta)
+    vector[float] hilbert(unsigned int ntaps, win_type window, double beta)

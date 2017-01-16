@@ -42,7 +42,7 @@ if USE_CYTHON:
 
 setup(
     name='hsh-signal',
-    version='0.1.0',
+    version='0.1.5',
     packages=['hsh_signal', 'gr_pll', 'gr_firdes'],
     ext_modules=extensions
 )
