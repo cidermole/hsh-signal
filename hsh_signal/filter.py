@@ -39,15 +39,16 @@ class SinkBlock(FilterBlock):
 
 class DataSink(SinkBlock):
     """Simply collects the data."""
-    def __init__(self):
+    def __init__(self, dtype=None):
         super(DataSink, self).__init__()
-        self.data = np.array([])
+        self.data = np.array([], dtype=dtype)
+        self.dtype = dtype
 
     def put(self, x):
         self.data = np.concatenate([self.data, x])
 
     def reset(self):
-        self.data = np.array([])
+        self.data = np.array([], dtype=self.dtype)
 
 
 class Delay(FilterBlock):
