@@ -75,7 +75,7 @@ def load_raw_audio(file_name):
 
 
 def beatdet_alivecor(signal, fps=48000, lpad_t=0):
-    """decode, clean, and beatdetect AliveCor."""
+    """decode, scrub, and beatdetect AliveCor."""
     #print 'ecg_fps=', ecg_fps
     ecg_raw = decode_alivecor(signal, fps=fps)
     ecg_dec_fps = 300

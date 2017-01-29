@@ -6,10 +6,10 @@ import time
 import pickle
 
 from .pickling import load_zipped_pickle
-from .alivecor import decode_alivecor
+from .alivecor import decode_alivecor, beatdet_alivecor, load_raw_audio
 from .signal import evenly_resample, highpass
 from .heartseries import Series
-from .ppg import ppg_beatdetect
+from .ppg import ppg_beatdetect_brueser, ppg_beatdetect_getrr
 
 import requests
 import json
@@ -33,6 +33,7 @@ def classify_results(meta_data, series_data):
 
 
 def parse_app_series(filename):
+    """TODO: deprecate"""
     series_data = np.load(filename)
 
     audio_data = series_data['audio_data']
@@ -77,6 +78,12 @@ def server_series_filename(meta_data):
     return '{}_{}_series.b'.format(unixtime, sane_app_id)
 
 
+def audio_filename(audio_base, meta_data):
+    sane_app_id = sanitize(meta_data['app_info']['id'], '0123456789ABCDEF')
+    start_time = int(time.mktime(meta_data['start_time'].timetuple()))
+    return os.path.join(audio_base, '{}_series.b_{}'.format(start_time, sane_app_id))
+
+
 class AppData:
     """source agnostic loader, handles data from phones and server."""
 
@@ -103,6 +110,21 @@ class AppData:
         self.meta_data = meta_data
         self.series_data = series_data
 
+    def ecg_parse_beatdetect(self):
+        audio_base = os.path.join(os.path.dirname(self.meta_filename), 'audio')
+        st, aid = int(time.mktime(self.meta_data['start_time'].timetuple())), self.meta_data['app_id']
+        raw_sig, fps = load_raw_audio(audio_filename(audio_base, self.meta_data))
+        ecg = beatdet_alivecor(raw_sig, fps)
+        return ecg
+
+    def has_ecg(self):
+        audio_base = os.path.join(os.path.dirname(self.meta_filename), 'audio')
+        if not os.path.exists(audio_filename(audio_base, self.meta_data)):
+            return False
+        # this call is expensive if we have audio and need to check it for AliveCor
+        # TODO: check spectrum
+        return True
+
     def ppg_fps(self):
         ppg_data = self.series_data['ppg_data']
         ts = ppg_data[:,0]
@@ -120,12 +142,17 @@ class AppData:
 
         return Series(demean, fps=ppg_fps, lpad=-ts[0]*ppg_fps)
 
-    def ppg_parse_beatdetect(self):
+    def ppg_parse_beatdetect(self, type='brueser'):
         cache_file = os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_beatdet.b')
         if os.path.exists(cache_file):
             return np.load(cache_file)
 
-        ppg = ppg_beatdetect(self.ppg_parse())
+        if type == 'brueser':
+            ppg = ppg_beatdetect_brueser(self.ppg_parse())
+        elif type == 'getrr':
+            ppg = ppg_beatdetect_getrr(self.ppg_parse())
+        else:
+            raise ValueError('type must be one of brueser|getrr')
 
         if os.path.isdir(AppData.CACHE_DIR):
             with open(cache_file, 'wb') as fo:
@@ -133,11 +160,11 @@ class AppData:
 
         return ppg
 
-    def get_result(self):
+    def get_result(self, reclassify=False):
         """calls HS API /reclassify if necessary (if result not yet cached).
         :returns result dict with keys ['pred', 'filtered', 'idx']"""
         cache_file = os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_result.b')
-        if os.path.exists(cache_file):
+        if os.path.exists(cache_file) and not reclassify:
             return np.load(cache_file)
 
         res = classify_results(self.meta_data, self.series_data)

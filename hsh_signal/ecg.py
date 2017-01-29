@@ -2,10 +2,11 @@ import sys
 import numpy as np
 from signal import localmax_climb, slices, cross_corr, hz2bpm
 import matplotlib.pyplot as plt
-from .heartseries import Series
+from .heartseries import Series, HeartSeries
 
 
 class NoisyECG(object):
+    """TODO: this class should not leak out anywhere. Rename and fix external things that break. Then, redesign scrub_ecg()"""
     GOOD_BEAT_THRESHOLD = 0.5  #: normalized cross-correlation threshold for good beats, when compared vs. the median
 
     def __init__(self, ecg, debug=False):
@@ -62,7 +63,7 @@ class NoisyECG(object):
 
         ecg = self.ecg
 
-        ecg.x[:int(ecg.fps*5)] *= 0.0  # avoid the terrible swing
+        #ecg.x[:int(ecg.fps*5)] *= 0.0  # avoid the terrible swing
 
         #
         # Kim ECG beat detection
@@ -172,3 +173,20 @@ def scrub_ecg(ecg_in, THRESHOLD = 8.0):
     ecg.x = np.clip(ecg.x, np.mean(ecg.x) - 5*np.std(ecg.x), np.mean(ecg.x) + 5*np.std(ecg.x))
 
     return ecg  #, check_centers, verdict
+
+
+def beatdet_ecg(ecg_in):
+    """
+    UNTESTED
+
+    beatdet_ecg(scrub_ecg(ecg))
+
+    @see beatdet_alivecor(signal, fps=48000, lpad_t=0) in hsh_signal.alivecor
+    """
+    from kimqrsdetector.kimqrsdetector import QRSdetection
+    smoothsignal = ecg_in.x
+    # adjust distribution to the one Kim has optimized for
+    smoothsignal = (smoothsignal-np.mean(smoothsignal))/np.std(smoothsignal)*0.148213-0.191034
+    loc, beattime = QRSdetection(smoothsignal, ecg_in.fps, ecg_in.t, ftype=0)
+    loc = loc.flatten()
+    return HeartSeries(ecg_in.x, loc, fps=ecg_in.fps)
