@@ -190,3 +190,21 @@ def beatdet_ecg(ecg_in):
     loc, beattime = QRSdetection(smoothsignal, ecg_in.fps, ecg_in.t, ftype=0)
     loc = loc.flatten()
     return HeartSeries(ecg_in.x, loc, fps=ecg_in.fps)
+
+
+def ecg_snr(raw, fps):
+    """SNR of AliveCor ECG in raw audio. For quick (0.5 sec) checking whether audio contains ECG or not."""
+    win_size = int(2.0*fps)  # 2sec window
+    f1 = float(fps) / float(win_size)  # FFT frequency spacing
+    power_ecg, power_noise = 0.0, 0.0
+    for sl in range(0,len(raw)-win_size,win_size):
+        slf = np.fft.fft(raw[sl:sl+win_size])
+        # power in the AliveCor band (18.8 kHz)
+        ecg_band = slf[int(18000/f1):int(19600/f1)]
+        # compared to high-freq baseline noise
+        noise_band = slf[int(16000/f1):int(17600/f1)]
+        pe, pn = np.sqrt(np.sum(np.abs(ecg_band)**2)) / len(ecg_band), np.sqrt(np.sum(np.abs(noise_band)**2)) / len(noise_band)
+        power_ecg += pe
+        power_noise += pn
+    # nb. division removes const factor of #windows
+    return 20.0 * np.log10(power_ecg / power_noise)

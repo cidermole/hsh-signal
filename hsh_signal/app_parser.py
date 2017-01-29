@@ -10,6 +10,7 @@ from .alivecor import decode_alivecor, beatdet_alivecor, load_raw_audio
 from .signal import evenly_resample, highpass
 from .heartseries import Series
 from .ppg import ppg_beatdetect_brueser, ppg_beatdetect_getrr
+from .ecg import ecg_snr
 
 import requests
 import json
@@ -118,12 +119,13 @@ class AppData:
         return ecg
 
     def has_ecg(self):
+        """this call is more expensive if we have audio and need to check it for AliveCor"""
         audio_base = os.path.join(os.path.dirname(self.meta_filename), 'audio')
         if not os.path.exists(audio_filename(audio_base, self.meta_data)):
             return False
-        # this call is expensive if we have audio and need to check it for AliveCor
-        # TODO: check spectrum
-        return True
+        # check spectrum
+        raw_sig, fps = load_raw_audio(audio_filename(audio_base, self.meta_data))
+        return ecg_snr(raw_sig, fps) > 20.0
 
     def ppg_fps(self):
         ppg_data = self.series_data['ppg_data']
