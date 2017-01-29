@@ -18,7 +18,15 @@ def ppg_beatdetect_getrr(ppg, debug=False):
     assert np.abs(ppg.fps - 30.0) < 1e-3
     fps = ppg.fps
     data = np.vstack((ppg.t, ppg.x)).T
-    ibi, filtered, idx = getrr(data, fps)
+
+    #ibi, filtered, idx = getrr(data, fps, convert_to_ms=True)
+
+    series = data[:,1]
+    reversed_data = np.vstack((data[:,0], list(reversed(series)))).T
+    ibis, filtered, idx = getrr(reversed_data, fps = 30, convert_to_ms=True)
+    ibis = np.array(list(reversed(ibis)))
+    idx = list((len(series)-1) - np.array(idx))
+    filtered = np.array(list(reversed(filtered)))
 
     return HeartSeries(ppg.x, idx, fps=ppg.fps, lpad=ppg.lpad)
 
