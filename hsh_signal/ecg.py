@@ -52,7 +52,7 @@ class NoisyECG(object):
 
         return lf_hf_db > 5.0 and power_similar
 
-    def beat_detect(self, debug=False):
+    def beat_detect(self, debug=False, outlierthreshold=0.001):
         # Heuristics:
         # * found enough beats
         # * median ibi is in plausible range (or even: some percentile of ibis is in plausible range)
@@ -68,6 +68,22 @@ class NoisyECG(object):
         # Kim ECG beat detection
         #
         smoothsignal = ecg.x
+        
+        # kill outliers
+        mn, mx = np.min(smoothsignal), np.max(smoothsignal)
+        m = min(abs(mn),abs(mx))
+        N = 100
+        step = m/float(N)
+        for i in range(N):
+            n = len(np.where(smoothsignal<-m)[0]) + len(np.where(smoothsignal>m)[0])
+            if n > outlierthreshold*len(smoothsignal):
+                break
+            m -= step
+        mn, mx = -m, m
+
+        smoothsignal[smoothsignal<mn] = mn
+        smoothsignal[smoothsignal>mx] = mx
+        
         # adjust distribution to the one Kim has optimized for
         smoothsignal = (smoothsignal-np.mean(smoothsignal))/np.std(smoothsignal)*0.148213-0.191034
         loc, beattime = self.QRSdetection(smoothsignal, ecg.fps, ecg.t, ftype=0)
