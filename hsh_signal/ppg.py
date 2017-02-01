@@ -25,7 +25,7 @@ def ppg_beatdetect_getrr(ppg, debug=False):
     reversed_data = np.vstack((data[:,0], list(reversed(series)))).T
     ibis, filtered, idx = getrr(reversed_data, fps = 30, convert_to_ms=True)
     ibis = np.array(list(reversed(ibis)))
-    idx = list((len(series)-1) - np.array(idx))
+    idx = list((len(series)-1) - np.array(list(reversed(idx))))
     filtered = np.array(list(reversed(filtered)))
 
     return HeartSeries(ppg.x, idx, fps=ppg.fps, lpad=ppg.lpad)

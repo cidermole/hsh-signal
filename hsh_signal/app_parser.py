@@ -112,20 +112,54 @@ class AppData:
         self.series_data = series_data
 
     def ecg_parse_beatdetect(self):
+        cache_file = os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_beatdet_ecg.b')
+        if os.path.exists(cache_file):
+            return np.load(cache_file)
+
         audio_base = os.path.join(os.path.dirname(self.meta_filename), 'audio')
-        st, aid = int(time.mktime(self.meta_data['start_time'].timetuple())), self.meta_data['app_id']
+        st, aid = int(time.mktime(self.meta_data['start_time'].timetuple())), self.meta_data['app_info']['id']
         raw_sig, fps = load_raw_audio(audio_filename(audio_base, self.meta_data))
         ecg = beatdet_alivecor(raw_sig, fps)
+
+        if os.path.isdir(AppData.CACHE_DIR):
+            with open(cache_file, 'wb') as fo:
+                pickle.dump(ecg, fo)
+
         return ecg
 
-    def has_ecg(self):
-        """this call is more expensive if we have audio and need to check it for AliveCor"""
+    def ecg_snr(self):
         audio_base = os.path.join(os.path.dirname(self.meta_filename), 'audio')
         if not os.path.exists(audio_filename(audio_base, self.meta_data)):
-            return False
+            return -10.0
         # check spectrum
         raw_sig, fps = load_raw_audio(audio_filename(audio_base, self.meta_data))
-        return ecg_snr(raw_sig, fps) > 20.0
+        return ecg_snr(raw_sig, fps)
+
+    def has_ecg(self, THRESHOLD=25.0):
+        """
+        Returns True if an AliveCor is in the audio track. Does not mean there's a clean ECG recording.
+        """
+        cache_file = os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_beatdet_hasecg.b')
+        if os.path.exists(cache_file):
+            with open(cache_file, 'rb') as fi:
+                pld = pickle.load(fi)
+                if isinstance(pld, tuple):
+                    th, rv = pld
+                    if th == THRESHOLD: return rv
+
+        audio_base = os.path.join(os.path.dirname(self.meta_filename), 'audio')
+        if os.path.exists(audio_filename(audio_base, self.meta_data)):
+            # check spectrum
+            raw_sig, fps = load_raw_audio(audio_filename(audio_base, self.meta_data))
+            retval = ecg_snr(raw_sig, fps) > THRESHOLD  # below, very few ECGs are usable...
+        else:
+            retval = False
+
+        if os.path.isdir(AppData.CACHE_DIR):
+            with open(cache_file, 'wb') as fo:
+                pickle.dump((THRESHOLD, retval), fo)
+
+        return retval
 
     def ppg_fps(self):
         ppg_data = self.series_data['ppg_data']

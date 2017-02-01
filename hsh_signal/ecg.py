@@ -145,7 +145,11 @@ def baseline_energy(ecg):
 
 
 def scrub_ecg(ecg_in, THRESHOLD = 8.0):
-    """return an ecg signal where noisy bits are set to zero"""
+    """
+    return an ecg signal where noisy bits are set to zero
+
+    # nb. scrub_ecg() always kills an already-scrubbed lowpass'd ECG... :/  why?
+    """
     #ecg = ecg_in.copy()
     #THRESHOLD = 8.0  # dB above baseline_energy()
     ecg = Series(ecg_in.x, ecg_in.fps, ecg_in.lpad)
@@ -207,4 +211,6 @@ def ecg_snr(raw, fps):
         power_ecg += pe
         power_noise += pn
     # nb. division removes const factor of #windows
+    if power_noise == 0.0 and power_ecg == 0.0:
+        return -10.0  # nothing? pretend bad SNR
     return 20.0 * np.log10(power_ecg / power_noise)
