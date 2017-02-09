@@ -71,6 +71,12 @@ class HeartSeries(Series):
     def copy(self):
         return HeartSeries(self.x, self.ibeats, self.fps, self.lpad)
 
+    def shift(self, dt):
+        """add a time shift in seconds, moving the signal to the left."""
+        self.lpad += dt * self.fps
+        self.t -= dt
+        self.tbeats -= dt
+
     def plot(self, plotter=None, dt=0.0):
         import matplotlib.pyplot as plt
 
@@ -90,11 +96,13 @@ class HeartSeries(Series):
         for tb in tbeats:
             ib = tb * self.fps
             if ib < 1.0 or ib > len(self.x) - 2:
-                beat_y.append(ib)
+                beat_y.append(self.x[max(min(int(ib), len(self.x)-1), 0)])
                 continue
             xs = [int(np.floor(ib)), int(np.ceil(ib))]
+            if xs[0] == xs[1]:
+                xs[1] += 1  # happens if ib is precise integer
             ys = self.x[xs]
-            beat_y.append(np.interp([ib], xs, ys))
+            beat_y.append(np.interp([ib], xs, ys)[0])
         plotter.scatter(tbeats2 - dt, beat_y, c=c)
 
     def closest_beat(self, t):
