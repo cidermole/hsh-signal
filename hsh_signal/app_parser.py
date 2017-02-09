@@ -137,6 +137,7 @@ class AppData:
 
     def has_ecg(self, THRESHOLD=25.0):
         """
+        to do: refactor rename THRESHOLD to snr_threshold
         Returns True if an AliveCor is in the audio track. Does not mean there's a clean ECG recording.
         """
         cache_file = os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_beatdet_hasecg.b')
@@ -167,6 +168,17 @@ class AppData:
         if len(ts) < 2:
             return 0.0
         return float(len(ts) - 1) / (ts[-1] - ts[0])
+
+    def ppg_trend(self):
+        series_data = self.series_data
+
+        ppg_fps = 30.0
+        ppg_data = evenly_resample(series_data['ppg_data'][:,0], series_data['ppg_data'][:,1], target_fps=ppg_fps)
+        ts = ppg_data[:,0]
+        demean = highpass(highpass(ppg_data[:,1], ppg_fps), ppg_fps)
+        trend = ppg_data[:,1] - demean
+
+        return Series(trend, fps=ppg_fps, lpad=-ts[0]*ppg_fps)
 
     def ppg_parse(self):
         series_data = self.series_data
