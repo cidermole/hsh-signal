@@ -84,6 +84,7 @@ class NoisyECG(object):
 
         smoothsignal[smoothsignal<mn] = mn
         smoothsignal[smoothsignal>mx] = mx
+        smoothsignal[-10:] = 0 # extreme outlier in last few frames
         
         # adjust distribution to the one Kim has optimized for
         smoothsignal = (smoothsignal-np.mean(smoothsignal))/np.std(smoothsignal)*0.148213-0.191034
