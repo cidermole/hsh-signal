@@ -88,8 +88,6 @@ def audio_filename(audio_base, meta_data):
 
 class AppData:
     """source agnostic loader, handles data from phones and server."""
-    # TODO: fix timezone issues AppData('/mnt/hsh/ad/1487024596_7F07F378_meta.b') -> IOError: [Errno 2] No such file or directory: '/mnt/hsh/ad/1487013796_7F07F378_series.b'
-
     CACHE_DIR = '.cache-nosync'
 
     def __init__(self, meta_filename):

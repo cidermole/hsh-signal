@@ -22,6 +22,11 @@ def ppg_beatdetect_getrr(ppg, debug=False):
     #ibi, filtered, idx = getrr(data, fps, convert_to_ms=True)
 
     series = data[:,1]
+    if np.std(series) < 1e-6:
+        # if np.std(series)==0, getrr() will raise "ValueError: array must not contain infs or NaNs"
+        # instead, return no beats == []
+        return HeartSeries(ppg.x, [], fps=ppg.fps, lpad=ppg.lpad)
+    
     reversed_data = np.vstack((data[:,0], list(reversed(series)))).T
     ibis, filtered, idx = getrr(reversed_data, fps = 30, convert_to_ms=True)
     ibis = np.array(list(reversed(ibis)))

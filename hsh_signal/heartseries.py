@@ -85,7 +85,7 @@ class HeartSeries(Series):
 
         self.scatter(plotter, dt)
 
-    def scatter(self, plotter=None, dt=0.0, tbeats2=None, c='r'):
+    def scatter(self, plotter=None, dt=0.0, tbeats2=None, c='b'):
         import matplotlib.pyplot as plt
 
         plotter = plt if plotter is None else plotter
@@ -115,6 +115,9 @@ class HeartSeries(Series):
         cand_times = self.tbeats[idxs]
         #print 'closest_beat(t=',t,') cand_times=', cand_times
         return idxs[np.argmin(np.abs(cand_times - t))]
+
+    def t2i(self, t):
+        return (t - self.t[0]) * self.fps
 
     def aligned_iibeats_repeat(self, ecg, ppg_dt=0.0):
         ppg_ibs, ecg_ibs = [], []
