@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import os
 import re
 import time
+import calendar
 import pickle
 
 from .pickling import load_zipped_pickle
@@ -74,19 +75,20 @@ def sanitize(s, validchars):
 
 
 def server_series_filename(meta_data):
-    unixtime = int(time.mktime(meta_data['start_time'].timetuple()))
+    unixtime = int(calendar.timegm(meta_data['start_time'].utctimetuple()))
     sane_app_id = sanitize(meta_data['app_info']['id'], '0123456789ABCDEF')
     return '{}_{}_series.b'.format(unixtime, sane_app_id)
 
 
 def audio_filename(audio_base, meta_data):
     sane_app_id = sanitize(meta_data['app_info']['id'], '0123456789ABCDEF')
-    start_time = int(time.mktime(meta_data['start_time'].timetuple()))
+    start_time = int(calendar.timegm(meta_data['start_time'].utctimetuple()))
     return os.path.join(audio_base, '{}_series.b_{}'.format(start_time, sane_app_id))
 
 
 class AppData:
     """source agnostic loader, handles data from phones and server."""
+    # TODO: fix timezone issues AppData('/mnt/hsh/ad/1487024596_7F07F378_meta.b') -> IOError: [Errno 2] No such file or directory: '/mnt/hsh/ad/1487013796_7F07F378_series.b'
 
     CACHE_DIR = '.cache-nosync'
 
@@ -117,7 +119,7 @@ class AppData:
             return np.load(cache_file)
 
         audio_base = os.path.join(os.path.dirname(self.meta_filename), 'audio')
-        st, aid = int(time.mktime(self.meta_data['start_time'].timetuple())), self.meta_data['app_info']['id']
+        st, aid = int(calendar.timegm(self.meta_data['start_time'].utctimetuple())), self.meta_data['app_info']['id']
         raw_sig, fps = load_raw_audio(audio_filename(audio_base, self.meta_data))
         ecg = beatdet_alivecor(raw_sig, fps)
 
@@ -237,6 +239,13 @@ class AppData:
         if self.cad_or_afib(): return True
 
         return False
+
+    def notes(self):
+        if not 'doctor' in self.meta_data:
+            # no 'doctor' key: did not save any input, or old app version
+            return u''
+        doctor = self.meta_data['doctor']
+        return doctor['text'].replace('\n', ' ')
 
     def cad_or_afib(self):
         if not 'doctor' in self.meta_data: return False
