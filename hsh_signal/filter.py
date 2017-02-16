@@ -250,6 +250,43 @@ class Bandreject(FIRFilter):
         return res
 
 
+class Downsampler(FilterBlock):
+    """Evenly spaced downsampler by an integer ratio."""
+    def __init__(self, ratio):
+        super(Downsampler, self).__init__()
+        self.ratio = ratio
+        self.waitfor = 0
+    def batch(self, x):
+        if len(x) <= self.waitfor:
+            self.waitfor -= len(x)
+            return np.array([])
+        ret = x[self.waitfor + np.arange(0, len(x)-self.waitfor, self.ratio)]
+        self.waitfor = self.ratio - len(x) % self.ratio
+        return ret
+
+# d=Downsampler(2)
+# d.batch(np.array([1]))
+# Out[58]:
+# array([1])
+# In [59]:
+#
+# d.batch(np.array([2]))
+# d.batch(np.array([2]))
+# Out[59]:
+# array([], dtype=float64)
+# In [60]:
+#
+# d.batch(np.array([3,4,5,6,7]))
+# d.batch(np.array([3,4,5,6,7]))
+# Out[60]:
+# array([3, 5, 7])
+# In [61]:
+#
+# 9
+# d.batch(np.array([8,9]))
+# Out[61]:
+# array([9])
+
 class ChunkDataSource(SourceBlock):
     """
     Fake Microphone signal source for testing. Provides a wav as audio.
