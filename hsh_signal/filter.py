@@ -304,6 +304,20 @@ class RegroupBatches(FilterBlock):
             self._consumer.put(self.batch(x[s:s+self.out_batch_size]))
 
 
+class MixLocalOscillator(FilterBlock):
+    """Local oscillator and mixer that mixes its output in."""
+    def __init__(self, fps, f0):
+        super(MixLocalOscillator, self).__init__()
+        self.fps, self.f0 = fps, f0
+        self.t = 0.0
+
+    def batch(self, x):
+        t = self.t + np.arange(len(x))/float(self.fps)
+        self.t = t[-1] + 1.0/float(self.fps)
+        carrier = np.sin(2*np.pi*self.f0*t)
+        return x * carrier
+
+
 class ChunkDataSource(SourceBlock):
     """
     Fake Microphone signal source for testing. Provides a wav as audio.
