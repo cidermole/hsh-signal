@@ -287,6 +287,23 @@ class Downsampler(FilterBlock):
 # Out[61]:
 # array([9])
 
+
+class RegroupBatches(FilterBlock):
+    """Splits up large incoming batches into smaller chunks."""
+    def __init__(self, out_batch_size):
+        super(RegroupBatches, self).__init__()
+        self.out_batch_size = out_batch_size
+
+    def batch(self, x):
+        return x
+
+    def put(self, x):
+        assert(self._consumer is not None)
+        starts = np.arange(0, len(x), self.out_batch_size)
+        for s in starts:
+            self._consumer.put(self.batch(x[s:s+self.out_batch_size]))
+
+
 class ChunkDataSource(SourceBlock):
     """
     Fake Microphone signal source for testing. Provides a wav as audio.
