@@ -88,6 +88,28 @@ def audio_filename(audio_base, meta_data):
     return os.path.join(audio_base, '{}_series.b_{}'.format(start_time, sane_app_id))
 
 
+class LazyDict(dict):
+    """avoids unpickling a lot of data, unless we actually need it."""
+    def __init__(self, zipped, filename):
+        super(LazyDict, self).__init__()
+        self._loaded = False
+        self.zipped, self.filename = zipped, filename
+        if not os.path.exists(filename):
+            raise IOError('LazyDict: file not found: {}'.format(filename))
+
+    def load(self):
+        if self.zipped:
+            self.update(load_zipped_pickle(self.filename))
+        else:
+            self.update(np.load(self.filename))
+        self._loaded = True
+
+    def __getitem__(self, key):
+        if not self._loaded:
+            self.load()
+        return super(LazyDict, self).__getitem__(key)
+
+
 class AppData:
     """source agnostic loader, handles data from phones and server."""
     CACHE_DIR = '.cache-nosync'
@@ -124,7 +146,7 @@ class AppData:
 
             dn = os.path.dirname(meta_filename)
             series_filename = os.path.join(dn, meta_data['series_fname'])
-            series_data = np.load(series_filename)
+            #series_data = np.load(series_filename)
             self._zipped = False
         except:
             # maybe it's server-saved metadata
@@ -132,12 +154,13 @@ class AppData:
 
             dn = os.path.dirname(meta_filename)
             series_filename = os.path.join(dn, server_series_filename(meta_data))
-            series_data = load_zipped_pickle(series_filename)
+            #series_data = load_zipped_pickle(series_filename)
             self._zipped = True
 
         self.meta_filename = meta_filename
         self.meta_data = meta_data
-        self.series_data = series_data
+        #self.series_data = series_data
+        self.series_data = LazyDict(self._zipped, series_filename)
 
     def ecg_parse_beatdetect(self):
         cache_file = os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_beatdet_ecg.b')
