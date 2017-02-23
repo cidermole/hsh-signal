@@ -121,6 +121,7 @@ def highpass(signal, fps, cf=0.5, tw=0.4):
     cutoff_freq = cf
     transition_width = tw
     taps = firdes.high_pass_2(1.0, fps, cutoff_freq, transition_width, 60.0)
+    if len(signal) == 0: return np.array([])  # workaround failing np.pad([])
     return np.convolve(np.pad(signal, (len(taps)//2,len(taps)//2), 'edge'), taps, mode='valid')
 
 def lowpass(signal, fps, cf=3.0, tw=0.4):
@@ -128,14 +129,17 @@ def lowpass(signal, fps, cf=3.0, tw=0.4):
     cutoff_freq = cf
     transition_width = tw
     taps = firdes.low_pass_2(1.0, fps, cutoff_freq, transition_width, 60.0)
+    if len(signal) == 0: return np.array([])  # workaround failing np.pad([])
     return np.convolve(np.pad(signal, (len(taps)//2,len(taps)//2), 'edge'), taps, mode='valid')
 
 def highpass_fft(signal, fps, cf=0.5, tw=0.4):
     from filter import Highpass, apply_filter
+    if len(signal) == 0: return np.array([])
     return apply_filter(signal, Highpass(cf, tw, fps))
 
 def lowpass_fft(signal, fps, cf=3.0, tw=0.4):
     from filter import Lowpass, apply_filter
+    if len(signal) == 0: return np.array([])
     return apply_filter(signal, Lowpass(cf, tw, fps))
 
 def cross_corr(x, y):

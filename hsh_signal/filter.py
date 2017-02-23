@@ -250,6 +250,20 @@ class Bandreject(FIRFilter):
         return res
 
 
+class Splitter(object):
+    def __init__(self):
+        self._consumers = []
+
+    def connect(self, consumer):
+        """add a consumer"""
+        self._consumers.append(consumer)
+
+    def put(self, x):
+        """batch-put array to consumers"""
+        for consumer in self._consumers:
+            consumer.put(x)
+
+
 class Downsampler(FilterBlock):
     """Evenly spaced downsampler by an integer ratio."""
     def __init__(self, ratio):
@@ -262,6 +276,8 @@ class Downsampler(FilterBlock):
             return np.array([])
         ret = x[self.waitfor + np.arange(0, len(x)-self.waitfor, self.ratio)]
         self.waitfor = self.ratio - len(x) % self.ratio
+        # TODO: bugged somehow when used through apply_filter()
+        # TODO: waitfor %= self.ratio
         return ret
 
 # d=Downsampler(2)

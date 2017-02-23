@@ -5,6 +5,8 @@ import re
 import time
 import calendar
 import pickle
+import glob
+from collections import defaultdict
 
 from .pickling import load_zipped_pickle
 from .alivecor import decode_alivecor, beatdet_alivecor, load_raw_audio
@@ -75,14 +77,14 @@ def sanitize(s, validchars):
 
 
 def server_series_filename(meta_data):
-    unixtime = int(calendar.timegm(meta_data['start_time'].utctimetuple()))
+    unixtime = int(calendar.timegm(meta_data['start_time'].utctimetuple()))-3600  # TODO: server timezone :(
     sane_app_id = sanitize(meta_data['app_info']['id'], '0123456789ABCDEF')
     return '{}_{}_series.b'.format(unixtime, sane_app_id)
 
 
 def audio_filename(audio_base, meta_data):
     sane_app_id = sanitize(meta_data['app_info']['id'], '0123456789ABCDEF')
-    start_time = int(calendar.timegm(meta_data['start_time'].utctimetuple()))
+    start_time = int(calendar.timegm(meta_data['start_time'].utctimetuple()))-3600  # TODO: server timezone :(
     return os.path.join(audio_base, '{}_series.b_{}'.format(start_time, sane_app_id))
 
 
@@ -90,8 +92,32 @@ class AppData:
     """source agnostic loader, handles data from phones and server."""
     CACHE_DIR = '.cache-nosync'
 
+    BASE_DIR = '/mnt/hsh/data/appresults.v2-nosync/appresults.v2'
+
+    KNOWN_APP_IDS = defaultdict(str)
+    KNOWN_APP_IDS.update({
+        '***REMOVED***': '***REMOVED***',
+        '***REMOVED***': '***REMOVED***',
+        '***REMOVED***': '***REMOVED***',
+        '***REMOVED***': '***REMOVED***',
+        '***REMOVED***': '***REMOVED***',
+        '***REMOVED***': '***REMOVED***',
+        '***REMOVED***': '***REMOVED***',
+        '***REMOVED***': '***REMOVED***'
+    })
+
+
     def __init__(self, meta_filename):
         # , meta_filename=None, series_filename=None
+
+        if not os.path.exists(meta_filename):
+            meta_filename_new = AppData.BASE_DIR + '/' + meta_filename
+            if os.path.exists(meta_filename_new):
+                meta_filename = meta_filename_new
+            else:
+                raise IOError('AppData meta file not found: {}'.format(meta_filename))
+
+        self._zipped = None
         try:
             # app-saved metadata: normal pickle
             meta_data = np.load(meta_filename)
@@ -99,6 +125,7 @@ class AppData:
             dn = os.path.dirname(meta_filename)
             series_filename = os.path.join(dn, meta_data['series_fname'])
             series_data = np.load(series_filename)
+            self._zipped = False
         except:
             # maybe it's server-saved metadata
             meta_data = load_zipped_pickle(meta_filename)
@@ -106,6 +133,7 @@ class AppData:
             dn = os.path.dirname(meta_filename)
             series_filename = os.path.join(dn, server_series_filename(meta_data))
             series_data = load_zipped_pickle(series_filename)
+            self._zipped = True
 
         self.meta_filename = meta_filename
         self.meta_data = meta_data
@@ -117,7 +145,7 @@ class AppData:
             return np.load(cache_file)
 
         audio_base = os.path.join(os.path.dirname(self.meta_filename), 'audio')
-        st, aid = int(calendar.timegm(self.meta_data['start_time'].utctimetuple())), self.meta_data['app_info']['id']
+        st, aid = int(calendar.timegm(self.meta_data['start_time'].utctimetuple()))-3600, self.meta_data['app_info']['id']  # TODO: server timezone :(
         raw_sig, fps = load_raw_audio(audio_filename(audio_base, self.meta_data))
         ecg = beatdet_alivecor(raw_sig, fps)
 
@@ -169,22 +197,58 @@ class AppData:
             return 0.0
         return float(len(ts) - 1) / (ts[-1] - ts[0])
 
-    def ppg_trend(self):
-        series_data = self.series_data
+    def ppg_raw(self):
+        ppg_data_uneven = self.series_data['ppg_data']
 
         ppg_fps = 30.0
-        ppg_data = evenly_resample(series_data['ppg_data'][:,0], series_data['ppg_data'][:,1], target_fps=ppg_fps)
+        ppg_data = evenly_resample(ppg_data_uneven[:,0], ppg_data_uneven[:,1], target_fps=ppg_fps)
+        ts = ppg_data[:,0]
+        return Series(ppg_data[:,1], fps=ppg_fps, lpad=-ts[0]*ppg_fps)
+
+    def ppg_trend(self):
+        ppg_data_uneven = self.series_data['ppg_data']
+
+        ppg_fps = 30.0
+        ppg_data = evenly_resample(ppg_data_uneven[:,0], ppg_data_uneven[:,1], target_fps=ppg_fps)
         ts = ppg_data[:,0]
         demean = highpass(highpass(ppg_data[:,1], ppg_fps), ppg_fps)
         trend = ppg_data[:,1] - demean
 
         return Series(trend, fps=ppg_fps, lpad=-ts[0]*ppg_fps)
 
+    def bcg_vectors(self):
+        fps = self.meta_data['bcg_fps']
+        bcg_data_uneven = self.series_data['bcg_data']
+
+        if len(bcg_data_uneven) == 0:
+            return [Series([], fps, lpad=0) for i in range(3)]
+
+        axes = []
+        ts = []
+        for i in range(1,4):
+            resampled = evenly_resample(bcg_data_uneven[:,0], bcg_data_uneven[:,i], target_fps=fps)
+            axes.append(resampled[:,1])
+            ts = resampled[:,0]
+
+        return [Series(ax, fps=fps, lpad=-ts[0]*fps) for ax in axes]
+
+    def bcg_abs(self):
+        vectors = self.bcg_vectors()
+        accel = []
+        if len(vectors[0].x) == 0: return Series([], fps=vectors[0].fps, lpad=0)
+        for x,y,z in zip(*[v.x for v in vectors]):
+            accel.append(np.sqrt(np.sum(np.array([x,y,z])**2)))
+        return Series(accel, fps=vectors[0].fps, lpad=vectors[0].lpad)
+
+    def bcg_abs_hp(self):
+        babs = self.bcg_abs()
+        return Series(highpass(highpass(babs.x, babs.fps), babs.fps), fps=babs.fps, lpad=babs.lpad)
+
     def ppg_parse(self):
-        series_data = self.series_data
+        ppg_data_uneven = self.series_data['ppg_data']
 
         ppg_fps = 30.0
-        ppg_data = evenly_resample(series_data['ppg_data'][:,0], series_data['ppg_data'][:,1], target_fps=ppg_fps)
+        ppg_data = evenly_resample(ppg_data_uneven[:,0], ppg_data_uneven[:,1], target_fps=ppg_fps)
         ts = ppg_data[:,0]
         demean = highpass(highpass(ppg_data[:,1], ppg_fps), ppg_fps)
 
@@ -245,6 +309,14 @@ class AppData:
         doctor = self.meta_data['doctor']
         return doctor['text'].replace('\n', ' ')
 
+    def app_id(self):
+        return self.meta_data['app_info']['id']
+
+    def user_name(self):
+        """returns empty string if unknown."""
+        app_id = self.app_id()
+        return AppData.KNOWN_APP_IDS[app_id]
+
     def cad_or_afib(self):
         if not 'doctor' in self.meta_data: return False
         doctor = self.meta_data['doctor']
@@ -263,3 +335,16 @@ class AppData:
         elif status == 'healthy':
             return False
         raise ValueError('unknown CVD status: {} in file {}'.format(status, self.meta_filename))
+
+    @staticmethod
+    def list_measurements():
+        meta_filenames = list(sorted(glob.glob(AppData.BASE_DIR + '/*_meta.b')))
+
+        app_data = []
+        for mf in meta_filenames:
+            try:
+                app_data.append(AppData(mf))
+            except (IOError, EOFError) as e:
+                print mf, e
+
+        return app_data

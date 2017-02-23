@@ -91,19 +91,22 @@ class HeartSeries(Series):
         plotter = plt if plotter is None else plotter
         tbeats2 = self.tbeats if tbeats2 is None else tbeats2
 
-        beat_y = []
         tbeats = tbeats2 + self.lpad / float(self.fps)
-        for tb in tbeats:
-            ib = tb * self.fps
-            if ib < 1.0 or ib > len(self.x) - 2:
-                beat_y.append(self.x[max(min(int(ib), len(self.x)-1), 0)])
-                continue
-            xs = [int(np.floor(ib)), int(np.ceil(ib))]
-            if xs[0] == xs[1]:
-                xs[1] += 1  # happens if ib is precise integer
-            ys = self.x[xs]
-            beat_y.append(np.interp([ib], xs, ys)[0])
-        plotter.scatter(tbeats2 - dt, beat_y, c=c)
+        plotter.scatter(tbeats2 - dt, self.yt(tbeats), c=c)
+
+    def yt(self, t):
+        """interpolated y value at a time falling between samples."""
+        if isinstance(t, (list, np.ndarray)):
+            return [self.yt(e) for e in t]
+
+        ib = t * self.fps
+        if ib < 1.0 or ib > len(self.x) - 2:
+            return self.x[max(min(int(ib), len(self.x)-1), 0)]
+        xs = [int(np.floor(ib)), int(np.ceil(ib))]
+        if xs[0] == xs[1]:
+            xs[1] += 1  # happens if ib is precise integer
+        ys = self.x[xs]
+        return np.interp([ib], xs, ys)[0]
 
     def closest_beat(self, t):
         """find the ib of the beat closest to t"""
