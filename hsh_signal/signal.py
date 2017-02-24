@@ -1,6 +1,7 @@
 from __future__ import division
 
 import numpy as np
+from scipy import interpolate
 
 
 def bpm2hz(f_bpm):
@@ -166,3 +167,10 @@ def localmax_climb(arr, loc, hwin):
         new_loc.append(im)
     return np.array(new_loc)
 
+
+def cubic_resample(series, fps_old=30, fps_new=300):
+    fps_old, fps_new = float(fps_old), float(fps_new)
+    t = np.arange(0.0, len(series)/fps_old, 1.0/fps_old)
+    yinterp = interpolate.UnivariateSpline(t, series, s=0)
+    tnew = np.arange(0.0, len(series)/fps_old, 1.0/fps_new)
+    return np.clip(yinterp(tnew), a_min=np.min(series.x), a_max=np.max(series.x))
