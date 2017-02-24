@@ -174,3 +174,11 @@ def cubic_resample(series, fps_old=30, fps_new=300):
     yinterp = interpolate.UnivariateSpline(t, series, s=0)
     tnew = np.arange(0.0, len(series)/fps_old, 1.0/fps_new)
     return np.clip(yinterp(tnew), a_min=np.min(series), a_max=np.max(series))
+
+
+def win_max(sig, hwin):
+    out = np.zeros(len(sig))
+    for i in range(len(sig)):
+        s,e = max(i-hwin, 0), min(i+hwin+1, len(sig))
+        out[i] = np.max(sig[s:e])
+    return out

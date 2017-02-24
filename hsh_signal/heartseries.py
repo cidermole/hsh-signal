@@ -41,11 +41,11 @@ class Series(object):
         with open(filename, 'wb') as fo:
             pickle.dump(self, fo, protocol=2)
 
-    def plot(self, plotter=None, dt=0.0):
+    def plot(self, plotter=None, dt=0.0, **kwargs):
         import matplotlib.pyplot as plt
 
         plotter = plt if plotter is None else plotter
-        plotter.plot(self.t - dt, self.x)
+        plotter.plot(self.t - dt, self.x, **kwargs)
 
     def stem(self, plotter=None, dt=0.0):
         import matplotlib.pyplot as plt
@@ -77,11 +77,11 @@ class HeartSeries(Series):
         self.t -= dt
         self.tbeats -= dt
 
-    def plot(self, plotter=None, dt=0.0):
+    def plot(self, plotter=None, dt=0.0, **kwargs):
         import matplotlib.pyplot as plt
 
         plotter = plt if plotter is None else plotter
-        plotter.plot(self.t - dt, self.x)
+        plotter.plot(self.t - dt, self.x, **kwargs)
 
         self.scatter(plotter, dt)
 

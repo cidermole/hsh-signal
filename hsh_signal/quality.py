@@ -23,6 +23,10 @@ class QsqiPPG(HeartSeries):
         super(QsqiPPG, self).__init__(*args, **kwargs)
         self.template = self.beat_template()
 
+    @staticmethod
+    def from_heart_series(hs):
+        return QsqiPPG(hs.x, hs.ibeats, fps=hs.fps, lpad=hs.lpad)
+
     def beat_template(self):
         self.L = np.median(np.diff(self.tbeats))
         slicez = np.array(slices(self.x, self.ibeats, hwin=int(self.L*self.fps/2.)))
@@ -32,6 +36,8 @@ class QsqiPPG(HeartSeries):
         if len(good_corrs) < QsqiPPG.BEAT_THR * len(corrs):
             raise QsqiError('template 2 would keep only {} good beats of {} detected'.format(len(good_corrs), len(corrs)))
         template_2 = np.mean(slicez[good_corrs], axis=0)
+        if len(template_2) == 0:
+            raise QsqiError('template 2 length == 0, cowardly refusing to do signal quality analysis')
         return template_2
 
     def slices(self, method='direct'):
@@ -68,7 +74,10 @@ class QsqiPPG(HeartSeries):
 
     def resample(self, sig):
         """resample to length L sec."""
-        t = np.linspace(0, len(sig), int(self.L*self.fps), endpoint=False)
+        #t = np.linspace(0, len(sig), int(self.L*self.fps), endpoint=False)
+        t = np.linspace(0, len(sig), len(self.template), endpoint=False)
+        # 2*int(self.L*self.fps/2.)+1 or, len(self.template)
+        assert len(t) == len(self.template)
         return np.interp(t, np.arange(len(sig)), sig)
 
     def sqi2(self):
@@ -80,8 +89,9 @@ class QsqiPPG(HeartSeries):
 
     def dtw_resample(self, sl):
         """TODO: slooow. and does not use the metric in the paper."""
-        sx = sl.reshape((-1,1))
-        sy = self.template.reshape((-1,1))
+        # downsample again, to save some power.
+        sx = sl[::10].reshape((-1,1))
+        sy = self.template[::10].reshape((-1,1))
         dist, cost, acc, path = dtw(sx, sy, dist=lambda x, y: norm(x - y, ord=1))
         return sx[path[0]], sy[path[1]]
 
@@ -91,7 +101,3 @@ class QsqiPPG(HeartSeries):
         corrs = np.array([cross_corr(*self.dtw_resample(sl)) for sl in slicez])
         corrs = np.clip(corrs, a_min=0.0, a_max=1.0)
         return corrs
-
-    @staticmethod
-    def from_heart_series(hs):
-        return QsqiPPG(hs.x, hs.ibeats, fps=hs.fps, lpad=hs.lpad)

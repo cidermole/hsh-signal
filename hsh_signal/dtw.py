@@ -28,9 +28,9 @@ def dtw(x, y, dist):
         for j in range(c):
             D1[i, j] += min(D0[i, j], D0[i, j+1], D0[i+1, j])
     if len(x)==1:
-        path = zeros(len(y)), range(len(y))
+        path = zeros(len(y), dtype=int), range(len(y))
     elif len(y) == 1:
-        path = range(len(x)), zeros(len(x))
+        path = range(len(x)), zeros(len(x), dtype=int)
     else:
         path = _traceback(D0)
     return D1[-1, -1] / sum(D1.shape), C, D1, path
