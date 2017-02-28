@@ -7,7 +7,6 @@ def ppg_beatdetect(ppg, debug=False):
     return ppg_beatdetect_brueser(ppg, debug)
 
 def ppg_beatdetect_getrr(ppg, debug=False):
-    """UNTESTED!"""
     import sys
     srv_path = '/home/david/Info/ownCloud/heartshield/heartshield-server-backend'
     if srv_path not in sys.path:

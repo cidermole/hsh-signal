@@ -184,8 +184,14 @@ class AppData:
         if not os.path.exists(audio_filename(audio_base, self.meta_data)):
             return -10.0
         # check spectrum
-        raw_sig, fps = load_raw_audio(audio_filename(audio_base, self.meta_data))
-        return ecg_snr(raw_sig, fps)
+        try:
+            raw_sig, fps = load_raw_audio(audio_filename(audio_base, self.meta_data))
+            return ecg_snr(raw_sig, fps)
+        except ValueError:
+            # File "/mnt/hsh/hsh-signal/hsh_signal/alivecor.py", line 68, in load_raw_audio
+            # arr = arr.reshape((nframes, wf.getnchannels())).T
+            # ValueError: total size of new array must be unchanged
+            return -10.0
 
     def has_ecg(self, THRESHOLD=25.0):
         """
@@ -203,8 +209,14 @@ class AppData:
         audio_base = os.path.join(os.path.dirname(self.meta_filename), 'audio')
         if os.path.exists(audio_filename(audio_base, self.meta_data)):
             # check spectrum
-            raw_sig, fps = load_raw_audio(audio_filename(audio_base, self.meta_data))
-            retval = ecg_snr(raw_sig, fps) > THRESHOLD  # below, very few ECGs are usable...
+            try:
+                raw_sig, fps = load_raw_audio(audio_filename(audio_base, self.meta_data))
+                retval = ecg_snr(raw_sig, fps) > THRESHOLD  # below, very few ECGs are usable...
+            except ValueError:
+                # File "/mnt/hsh/hsh-signal/hsh_signal/alivecor.py", line 68, in load_raw_audio
+                # arr = arr.reshape((nframes, wf.getnchannels())).T
+                # ValueError: total size of new array must be unchanged
+                retval = False
         else:
             retval = False
 
@@ -278,9 +290,9 @@ class AppData:
 
         return Series(demean, fps=ppg_fps, lpad=-ts[0]*ppg_fps)
 
-    def ppg_parse_beatdetect(self, type='brueser'):
-        cache_file = os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_beatdet.b')
-        if os.path.exists(cache_file):
+    def ppg_parse_beatdetect(self, type='brueser', use_cache=True):
+        cache_file = os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_' + type + '_beatdet.b')
+        if os.path.exists(cache_file) and use_cache:
             return np.load(cache_file)
 
         if type == 'brueser':

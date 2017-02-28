@@ -91,13 +91,15 @@ class HeartSeries(Series):
         plotter = plt if plotter is None else plotter
         tbeats2 = self.tbeats if tbeats2 is None else tbeats2
 
-        tbeats = tbeats2 + self.lpad / float(self.fps)
-        plotter.scatter(tbeats2 - dt, self.yt(tbeats), c=c)
+        plotter.scatter(tbeats2 - dt, self.yt(tbeats2), c=c)
 
     def yt(self, t):
         """interpolated y value at a time falling between samples."""
         if isinstance(t, (list, np.ndarray)):
             return [self.yt(e) for e in t]
+
+        # TODO: check if change for ppgbeatannot.py broke something else
+        t += self.lpad / float(self.fps)
 
         ib = t * self.fps
         if ib < 1.0 or ib > len(self.x) - 2:

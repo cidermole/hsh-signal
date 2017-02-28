@@ -3,7 +3,23 @@ import numpy as np
 from signal import slices, cross_corr
 from heartseries import HeartSeries
 from dtw import dtw
+from scipy.stats.mstats import spearmanr
 
+
+def kurtosis(x):
+    # https://en.wikipedia.org/wiki/Kurtosis#Sample_kurtosis
+    xm = np.mean(x)
+    num = np.mean((x - xm)**4)
+    denom = np.mean((x - xm)**2)**2
+    return num/denom - 3
+
+def skewness(x):
+    # https://en.wikipedia.org/wiki/Skewness#Sample_skewness
+    xm = np.mean(x)
+    n = float(len(x))
+    num = np.mean((x - xm)**3)
+    denom = (1.0/(n-1) * np.sum((x - xm)**2)) ** (3.0 / 2.0)
+    return num/denom
 
 class QsqiError(RuntimeError): pass
 
@@ -22,6 +38,8 @@ class QsqiPPG(HeartSeries):
     def __init__(self, *args, **kwargs):
         super(QsqiPPG, self).__init__(*args, **kwargs)
         self.template = self.beat_template()
+        self.template_kurtosis = kurtosis(self.template)
+        self.template_skewness = skewness(self.template)
 
     @staticmethod
     def from_heart_series(hs):
@@ -49,7 +67,8 @@ class QsqiPPG(HeartSeries):
                 # need to center window on the beat, just like the template
                 s,e = self.ibeats[i], self.ibeats[i+1]
                 l = e-s
-                s,e = int(s-l/2.), int(e-l/2.)
+                s,e = max(int(s-l/2.), 0), min(int(e-l/2.), len(self.x))
+                assert s != e
                 #plt.plot(self.x[s:e])
                 """
                 rez = self.resample(self.x[s:e])
@@ -68,7 +87,7 @@ class QsqiPPG(HeartSeries):
         """direct matching (fiducial + length L template correlation)"""
         # nb. slight difference: we are centering the window on the beat, while Li et al
         slicez = self.slices(method='fixed')
-        corrs = np.array([cross_corr(sl, self.template) for sl in slicez])
+        corrs = np.array([cross_corr(sl, self.template) if len(sl) else 0.0 for sl in slicez])
         corrs = np.clip(corrs, a_min=0.0, a_max=1.0)
         return corrs
 
@@ -83,13 +102,13 @@ class QsqiPPG(HeartSeries):
     def sqi2(self):
         """linear resampling (between two fiducials up to length L, correlation)"""
         slicez = self.slices(method='variable')
-        corrs = np.array([cross_corr(self.resample(sl), self.template) for sl in slicez])
+        corrs = np.array([(cross_corr(self.resample(sl), self.template) if len(sl) else 0.0) for sl in slicez])
         corrs = np.clip(corrs, a_min=0.0, a_max=1.0)
         return corrs
 
     def dtw_resample(self, sl):
         """TODO: slooow. and does not use the metric in the paper."""
-        # downsample again, to save some power.
+        # downsample again, to save some CPU.
         sx = sl[::10].reshape((-1,1))
         sy = self.template[::10].reshape((-1,1))
         dist, cost, acc, path = dtw(sx, sy, dist=lambda x, y: norm(x - y, ord=1))
@@ -98,6 +117,25 @@ class QsqiPPG(HeartSeries):
     def sqi3(self):
         """DTW resampling (resampling to length L and correlation)"""
         slicez = self.slices(method='variable')
-        corrs = np.array([cross_corr(*self.dtw_resample(sl)) for sl in slicez])
+        corrs = np.array([cross_corr(*self.dtw_resample(sl)) if len(sl) else 0.0 for sl in slicez])
         corrs = np.clip(corrs, a_min=0.0, a_max=1.0)
         return corrs
+
+    def kurtosis(self):
+        # unclear if 'fixed' or 'variable' is any better, could not just eyeball.
+        slicez = self.slices(method='fixed')
+        return np.array([kurtosis(sl) if len(sl) else 0.0 for sl in slicez])
+
+    def skewness(self):
+        slicez = self.slices(method='fixed')
+        return np.array([skewness(sl) if len(sl) else 0.0 for sl in slicez])
+
+    def spearman(self):
+        slicez = self.slices(method='variable')
+        #corrs = np.array([spearmanr(*self.dtw_resample(sl))[0] if len(sl) else 0.0 for sl in slicez])
+        corrs = np.nan_to_num([spearmanr(*self.dtw_resample(sl))[0] if len(sl) else 0.0 for sl in slicez])
+        corrs = np.clip(corrs, a_min=0.0, a_max=1.0)
+        return corrs
+
+    #def sqi4(self):
+    #    """SQI based on Kurtosis."""
