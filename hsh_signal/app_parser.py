@@ -312,7 +312,7 @@ class AppData:
         if type == 'brueser':
             ppg = ppg_beatdetect_brueser(self.ppg_parse())
         elif type == 'getrr':
-            ppg = ppg_beatdetect_getrr(self.ppg_parse())
+            ppg = ppg_beatdetect_getrr(self.ppg_raw())
         else:
             raise ValueError('type must be one of brueser|getrr')
 
@@ -321,6 +321,23 @@ class AppData:
                 pickle.dump(ppg, fo)
 
         return ppg
+
+    def ecg_ppg_aligned(self):
+        """>>> ecg, ppg, ecg_ibs, ppg_ibs = ad.ecg_ppg_aligned()"""
+        import sys
+        sys.path.append('/home/david/heartshield/noisemodel')
+        from align_beats import analyze_ecg_ppg_base
+
+        ecg = self.ecg_parse_beatdetect()
+        ppg = self.ppg_parse_beatdetect('getrr', use_cache=False)
+
+        ppg_dt, rel_fps_error = analyze_ecg_ppg_base(ecg, ppg, step=50e-3, debug=False)
+
+        ppg.shift(-ppg_dt)
+
+        ppg_ibs, ecg_ibs = ppg.aligned_iibeats(ecg, ppg_dt=0.0)
+
+        return ecg, ppg, ecg_ibs, ppg_ibs
 
     def get_result(self, reclassify=False):
         """calls HS API /reclassify if necessary (if result not yet cached).
