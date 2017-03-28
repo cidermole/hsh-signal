@@ -191,7 +191,7 @@ def scrub_ecg(ecg_in, THRESHOLD = 8.0):
         if not v:
             ecg.x[c-hwin:c+hwin+1] *= 0.0  # zero the noisy bits
 
-    ecg.x = np.clip(ecg.x, np.mean(ecg.x) - 5*np.std(ecg.x), np.mean(ecg.x) + 5*np.std(ecg.x))
+    #ecg.x = np.clip(ecg.x, np.mean(ecg.x) - 10*np.std(ecg.x), np.mean(ecg.x) + 10*np.std(ecg.x))
 
     return ecg  #, check_centers, verdict
 

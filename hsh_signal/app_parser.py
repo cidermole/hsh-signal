@@ -154,7 +154,8 @@ class AppData:
             meta_data = load_zipped_pickle(meta_filename)
 
             dn = os.path.dirname(meta_filename)
-            series_filename = os.path.join(dn, server_series_filename(meta_data))
+            #series_filename = os.path.join(dn, server_series_filename(meta_data))
+            series_filename = meta_filename.replace('_meta', '_series')  # fix hackish filenames. grrml.
             #series_data = load_zipped_pickle(series_filename)
             self._zipped = True
 
@@ -180,6 +181,7 @@ class AppData:
         return ecg
 
     def ecg_snr(self):
+        """SNR of AliveCor ECG in raw audio. For quick (0.5 sec) checking whether audio contains ECG or not."""
         audio_base = os.path.join(os.path.dirname(self.meta_filename), 'audio')
         if not os.path.exists(audio_filename(audio_base, self.meta_data)):
             return -10.0
@@ -280,6 +282,18 @@ class AppData:
         babs = self.bcg_abs()
         return Series(highpass(highpass(babs.x, babs.fps), babs.fps), fps=babs.fps, lpad=babs.lpad)
 
+    def ppg_data(self):
+        """server-like data[] of PPG. evenly resampled and first 5sec cut off. Just like fed to getrr()"""
+        ppg_data_uneven = self.series_data['ppg_data']  # (N,4) matrix with [t,r,g,b] rows
+        times, series = ppg_data_uneven[:,0], ppg_data_uneven[:,1]  # red channel
+
+        # cut off the first 5 seconds for classification, just like in the v1 /rawrfclassify API
+        data = evenly_resample(times, series)
+        istart = np.where(times - times[0] > 5.0)[0][0]
+        data = data[istart:,:]
+
+        return data
+
     def ppg_parse(self):
         ppg_data_uneven = self.series_data['ppg_data']
 
@@ -361,6 +375,48 @@ class AppData:
             if details['cad'] or details['afib']:
                 return True
         return False
+
+    def cad(self):
+        return self.has_disease('cad')
+
+    def afib(self):
+        return self.has_disease('afib')
+
+    def has_disease(self, dtype='cad'):
+        if not 'doctor' in self.meta_data: return None
+        doctor = self.meta_data['doctor']
+        if 'details' in doctor:
+            details = doctor['details']
+            if details[dtype]:
+                return True
+            if not self.has_diagnosis():
+                return None
+            status = self.meta_data['doctor']['status']
+            if status == 'healthy':
+                return False
+        return None
+
+    def _age_or_gender(self, ftype='age'):
+        # TODO: new app v0.3 parser
+        if not 'doctor' in self.meta_data:
+            return None
+        doctor = self.meta_data['doctor']
+        if not 'details' in doctor:
+            return None
+        details = doctor['details']
+        if ftype in details and details[ftype] == '':
+            return None
+        if not ftype in details:
+            return None
+        return details[ftype]  # string!
+
+    def age(self):
+        # TODO: new app v0.3 parser
+        return self._age_or_gender('age')
+
+    def gender(self):
+        # TODO: new app v0.3 parser
+        return self._age_or_gender('gender')
 
     def get_cvd_status(self):
         if not self.has_diagnosis():

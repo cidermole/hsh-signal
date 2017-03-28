@@ -87,3 +87,8 @@ def beatdet_alivecor(signal, fps=48000, lpad_t=0):
     ne = NoisyECG(scrubbed)
     ecg2 = HeartSeries(scrubbed.x, ne.beat_idxs, fps=ecg.fps, lpad=ecg.lpad)
     return ecg2
+
+
+def beatdet_ecg(series):
+    ne = NoisyECG(series)
+    return HeartSeries(series.x, ne.beat_idxs, fps=series.fps, lpad=series.lpad)

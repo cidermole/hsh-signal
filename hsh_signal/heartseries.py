@@ -85,13 +85,13 @@ class HeartSeries(Series):
 
         self.scatter(plotter, dt)
 
-    def scatter(self, plotter=None, dt=0.0, tbeats2=None, c='b'):
+    def scatter(self, plotter=None, dt=0.0, tbeats2=None, **kwargs):
         import matplotlib.pyplot as plt
 
         plotter = plt if plotter is None else plotter
         tbeats2 = self.tbeats if tbeats2 is None else tbeats2
 
-        plotter.scatter(tbeats2 - dt, self.yt(tbeats2), c=c)
+        plotter.scatter(tbeats2 - dt, self.yt(tbeats2), **kwargs)
 
     def yt(self, t):
         """interpolated y value at a time falling between samples."""
