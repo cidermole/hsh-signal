@@ -47,7 +47,7 @@ class QsqiPPG(HeartSeries):
 
     def beat_template(self):
         self.L = np.median(np.diff(self.tbeats))
-        slicez = np.array(slices(self.x, self.ibeats, hwin=int(self.L*self.fps/2.)))
+        slicez = np.array(self.slices(method="variable")) #, hwin=int(self.L*self.fps/2.)))
         template_1 = np.mean(slicez, axis=0)
         corrs = np.array([cross_corr(sl, template_1) for sl in slicez])
         good_corrs = np.where(corrs > QsqiPPG.CC_THR)[0]
@@ -58,7 +58,7 @@ class QsqiPPG(HeartSeries):
             raise QsqiError('template 2 length == 0, cowardly refusing to do signal quality analysis')
         return template_2
 
-    def slices(self, method='direct'):
+    def slices(self, method='direct', L=30):
         if method == 'fixed':
             return np.array(slices(self.x, self.ibeats, hwin=int(self.L*self.fps/2.)))
         elif method == 'variable':
@@ -68,17 +68,16 @@ class QsqiPPG(HeartSeries):
                 s,e = self.ibeats[i], self.ibeats[i+1]
                 l = e-s
                 s,e = max(int(s-l/2.), 0), min(int(e-l/2.), len(self.x))
-                assert s != e
-                #plt.plot(self.x[s:e])
-                """
-                rez = self.resample(self.x[s:e])
-                plt.plot(rez)
+                if s != e:
+                    #plt.plot(self.x[s:e])
+                    rez = self.resample(self.x[s:e], L=L)
+                """plt.plot(rez)
                 plt.title(cross_corr(rez, self.template))
                 plt.show()
                 """
-                slicez.append(self.x[s:e])
+                slicez.append(rez) #(self.x[s:e])
             s = self.ibeats[-1]
-            slicez.append(self.x[int(s):int(s+self.L*self.fps)])  # surrogate length for last beat
+            #slicez.append(self.resample(self.x[int(s):int(s+self.L*self.fps)], L=30))  # surrogate length for last beat
             return slicez
         else:
             raise ValueError('slices() got unknown method={}'.format(method))
@@ -91,12 +90,14 @@ class QsqiPPG(HeartSeries):
         corrs = np.clip(corrs, a_min=0.0, a_max=1.0)
         return corrs
 
-    def resample(self, sig):
+    def resample(self, sig, L = None):
         """resample to length L sec."""
+        if L == None:
+            L = len(self.template)
         #t = np.linspace(0, len(sig), int(self.L*self.fps), endpoint=False)
-        t = np.linspace(0, len(sig), len(self.template), endpoint=False)
+        t = np.linspace(0, len(sig), L, endpoint=False)
         # 2*int(self.L*self.fps/2.)+1 or, len(self.template)
-        assert len(t) == len(self.template)
+        assert len(t) == L
         return np.interp(t, np.arange(len(sig)), sig)
 
     def sqi2(self):
