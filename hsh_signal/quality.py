@@ -45,6 +45,10 @@ class QsqiPPG(HeartSeries):
     def from_heart_series(hs):
         return QsqiPPG(hs.x, hs.ibeats, fps=hs.fps, lpad=hs.lpad)
 
+    @staticmethod
+    def from_series_data(signal, idx, fps=30, lpad=0):
+        return QsqiPPG(signal, idx, fps=fps, lpad=lpad)
+
     def beat_template(self):
         self.L = np.median(np.diff(self.tbeats))
         slicez = np.array(self.slices(method="variable")) #, hwin=int(self.L*self.fps/2.)))
