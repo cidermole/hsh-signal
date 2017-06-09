@@ -4,7 +4,8 @@ from signal import slices, cross_corr
 from heartseries import HeartSeries
 from dtw import dtw
 from scipy.stats.mstats import spearmanr
-
+from sklearn.linear_model import TheilSenRegressor
+import time
 
 def kurtosis(x):
     # https://en.wikipedia.org/wiki/Kurtosis#Sample_kurtosis
@@ -21,8 +22,8 @@ def skewness(x):
     denom = (1.0/(n-1) * np.sum((x - xm)**2)) ** (3.0 / 2.0)
     return num/denom
 
-class QsqiError(RuntimeError): pass
 
+class QsqiError(RuntimeError): pass
 
 class QsqiPPG(HeartSeries):
     """
@@ -33,7 +34,7 @@ class QsqiPPG(HeartSeries):
     """
 
     CC_THR = 0.8    #: cross-correlation threshold for including beats in template 2
-    BEAT_THR = 0.5  #: more beats thrown away? fail creating template 2
+    BEAT_THR = 0.3  #: more beats thrown away? fail creating template 2
 
     def __init__(self, *args, **kwargs):
         super(QsqiPPG, self).__init__(*args, **kwargs)
@@ -144,3 +145,131 @@ class QsqiPPG(HeartSeries):
 
     #def sqi4(self):
     #    """SQI based on Kurtosis."""
+
+
+class BeatQuality(QsqiPPG):
+    """
+    Beat quality indicator.
+
+    Quantifies downslope integrity and beat placement,
+    and flags anomalies for removal or redetection
+    """
+
+    # global parameters. should not bee to sensitive. real "meat" lies in anomaly detection
+    ACCEPTED_DEVIATION_PERCENTAGE = 10 # how much a downslope point may deviate from linearly regressed downslope
+    MINIMUM_LINEARITY = 0.75  # minimum acceptable "linearity", i.e. fraction of downslope "close" to downslope (see BeatQuality.ACCEPTED_DEVIATION_PERCENTAGE)
+    MINIMUM_R2 = 0.75 # minimum acceptable fit of downslope to linear regression
+
+    # outlier detection param - THIS ONE SHOULD BE VALIDATED USING A LARGE DATASET
+    OUTLIER_THRESHOLD = 7
+
+    VERBOSE = True
+
+    def __init__(self, *args, **kwargs):
+        super(QsqiPPG, self).__init__(*args, **kwargs)
+        tt = time.time()
+        self.template = self.beat_template()
+        tt = time.time() - tt
+        self.template_kurtosis = kurtosis(self.template)
+        self.template_skewness = skewness(self.template)
+
+        bt = time.time()
+        self.beat_quality = self.sqi2()
+        self.beat_outliers = self.detect_beat_outliers()
+        self.beat_outliers[self.beat_quality[:len(self.beat_outliers)] < BeatQuality.BEAT_THR] = True
+        bt = time.time() - bt
+
+        if BeatQuality.VERBOSE:
+            print "beat template found in",tt
+            print "outliers found in", bt
+            print len(np.where(self.beat_quality < BeatQuality.BEAT_THR)[0]), "bad SQ", self.beat_quality
+
+    @staticmethod
+    def from_heart_series(hs):
+        return BeatQuality(hs.x, hs.ibeats, fps=hs.fps, lpad=hs.lpad)
+
+
+    @staticmethod
+    def from_series_data(signal, idx, fps=30, lpad=0):
+        return BeatQuality(signal, idx, fps=fps, lpad=lpad)
+
+    @staticmethod
+    def tiny_outlier_detector(values, threshold=OUTLIER_THRESHOLD):
+        # idea by Iglewicz and Hoaglin (1993), summarized in NIST/SEMATECH e-Handbook of Statistical Methods
+        # works for tiny sample sizes
+        outlierscore = np.abs(0.6745 * (values - np.median(values)) / np.median(np.abs(values - np.median(values))))
+        if np.any(outlierscore>threshold):
+            print outlierscore
+        return np.where(outlierscore > threshold)[0]
+
+    def detect_beat_outliers(self):
+        beat_outliers = np.array([False] * len(self.ibeats), dtype=bool)
+
+        descriptors = []
+        for i in range(len(self.ibeats)):
+            ok_slope_length, ok_slope_angle, beat_downslope_orthogonal_distance, beat_downslope_peak_distance, iscrap = self.quantify_beat(i)
+            if iscrap:
+                beat_outliers[i] = True
+            else:
+                descriptors.append([ok_slope_length, ok_slope_angle, beat_downslope_orthogonal_distance, beat_downslope_peak_distance]) # track everything
+                #descriptors.append([beat_downslope_orthogonal_distance, beat_downslope_peak_distance]) # do NOT track slope lengths and angles (allows for physiological changes)
+        descriptors = np.array(descriptors)
+
+        for d in range(descriptors.shape[1]):
+            outlier_indices = BeatQuality.tiny_outlier_detector(descriptors[:, d])
+            if len(outlier_indices) > 0:
+                if BeatQuality.VERBOSE:
+                    print ["ok_slope_length", "ok_slope_angle", "beat_downslope_orthogonal_distance", "beat_downslope_peak_distance"][d],\
+                    "anomalies detected: ",len(outlier_indices)
+                beat_outliers[outlier_indices] = True
+
+        return beat_outliers
+
+
+    def quantify_beat(self, beatnumber):
+        beatindex = self.ibeats[beatnumber]
+        # approx expected ibi
+        meanibi = np.mean(np.diff(self.tbeats))
+        # downslope is less than half of full beat. look for peaks on either side
+        downslopewindow = int((meanibi / 2.5) * self.fps)
+        # pick preceding maximum
+        try:
+            maxindex = np.where(heartbeat_localmax(self.x[(beatindex - downslopewindow):beatindex]))[0][-1]
+        except:
+            maxindex = np.argmax(self.x[(beatindex - downslopewindow):beatindex])
+        peaki = beatindex - downslopewindow + maxindex
+        # double check we didn't go beyond prev. beat
+        if beatnumber > 0 and peaki <= self.ibeats[beatnumber - 1]:
+            peaki = self.ibeats[beatnumber - 1] + downslopewindow + np.argmax(self.x[(self.ibeats[beatnumber - 1] + downslopewindow):beatindex])
+        # pick succeeding minimum
+        troughi = beatindex + np.argmin(self.x[beatindex:(beatindex + downslopewindow)])
+        # double check we didn't go beyond next beat
+        if beatnumber < len(self.ibeats) - 1 and troughi >= self.ibeats[beatnumber + 1]:
+            troughi = beatindex + np.argmin(self.x[beatindex:(self.ibeats[beatnumber + 1] - 1)])
+        # robust regression on downslope
+        downslopemodel = TheilSenRegressor().fit(self.t[peaki:troughi].reshape(-1, 1), self.x[peaki:troughi])
+        r2 = downslopemodel.score(self.t[peaki:troughi].reshape(-1, 1), self.x[peaki:troughi])
+        # count which points are close enough to prediction
+        predicted_downslope = downslopemodel.predict(self.t[peaki:troughi].reshape(-1, 1))
+        amplitude = self.x[peaki] - self.x[troughi]
+        m, k = downslopemodel.coef_[0], downslopemodel.intercept_
+        point_to_line_distances = np.abs(k + m * self.t[peaki:troughi] - self.x[peaki:troughi]) / np.sqrt(1 + m * m)
+        point_to_line_distance_percentages = 100.0 / amplitude * point_to_line_distances
+        ok_points = np.where(point_to_line_distance_percentages < BeatQuality.ACCEPTED_DEVIATION_PERCENTAGE)[0]
+        fraction_acceptable = 1.0 / (troughi - peaki) * len(ok_points)
+        # numerically characterize non-crap portion of the slope
+        ok_slope_length = fraction_acceptable * np.sqrt((troughi - peaki) ** 2 + (self.x[peaki] - self.x[troughi]) ** 2)
+        ok_slope_angle = np.arctan(downslopemodel.coef_[0])
+        # numerically characterize beat placement
+        beat_downslope_orthogonal_distance = 0 if ok_slope_length == 0 else 1.0 / ok_slope_length * (
+        np.abs(k + m * self.t[beatindex] - self.x[beatindex]) / np.sqrt(1 + m * m))
+        beat_downslope_peak_distance = 0 if ok_slope_length == 0 else 1.0 / ok_slope_length * np.sqrt(
+            (beatindex - peaki) ** 2 + (self.x[peaki] - self.x[beatindex]) ** 2)
+
+        # check if certain to be bad fit
+        iscrap = False
+        if np.abs(r2) < BeatQuality.MINIMUM_R2 or fraction_acceptable < BeatQuality.MINIMUM_LINEARITY:
+            print "crap! ",beatnumber,r2, fraction_acceptable
+            iscrap = True
+
+        return ok_slope_length, ok_slope_angle, beat_downslope_orthogonal_distance, beat_downslope_peak_distance, iscrap
