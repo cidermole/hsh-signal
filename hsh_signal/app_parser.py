@@ -346,7 +346,7 @@ class AppData:
 
         ppg_dt, rel_fps_error = analyze_ecg_ppg_base(ecg, ppg, step=50e-3, debug=False)
 
-        ppg.shift(-ppg_dt)
+        ppg.shift(ppg_dt)
 
         ppg_ibs, ecg_ibs = ppg.aligned_iibeats(ecg, ppg_dt=0.0)
 
