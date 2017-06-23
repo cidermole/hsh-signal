@@ -364,7 +364,7 @@ class AppData:
         if not reclassify:
             for cache_file in cache_files:
                 if os.path.exists(cache_file):
-                    return np.load(cache_file)
+                    return load_zipped_pickle(cache_file)
 
         self.series_data.load()
         res = classify_results(self.meta_data, self.series_data, host=host)
