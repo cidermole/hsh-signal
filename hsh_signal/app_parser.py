@@ -181,13 +181,15 @@ class AppData:
             return np.load(cache_file)
 
         audio_base = os.path.join(os.path.dirname(self.meta_filename), 'audio')
-        st, aid = int(calendar.timegm(self.meta_data['start_time'].utctimetuple()))-3600, self.meta_data['app_info']['id']  # TODO: server timezone :(
         raw_sig, fps = load_raw_audio(audio_filename(audio_base, self.meta_data))
+        self.series_data.load()
         ecg = beatdet_alivecor(raw_sig, fps)
 
         if os.path.isdir(AppData.CACHE_DIR):
             with open(cache_file, 'wb') as fo:
                 pickle.dump(ecg, fo)
+
+        # note: we do not yet honor series_data['audio_start'] here.
 
         return ecg
 
