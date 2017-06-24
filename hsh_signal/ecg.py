@@ -68,7 +68,7 @@ class NoisyECG(object):
         #
         # Kim ECG beat detection
         #
-        smoothsignal = ecg.x
+        smoothsignal = np.array(ecg.x)
         
         # kill outliers
         mn, mx = np.min(smoothsignal), np.max(smoothsignal)
