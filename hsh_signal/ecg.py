@@ -3,6 +3,7 @@ import numpy as np
 from signal import localmax_climb, slices, cross_corr, hz2bpm
 import matplotlib.pyplot as plt
 from .heartseries import Series, HeartSeries
+from sklearn.linear_model import TheilSenRegressor
 
 
 class NoisyECG(object):
@@ -231,3 +232,98 @@ def ecg_snr(raw, fps):
     if power_noise == 0.0 and power_ecg == 0.0:
         return -10.0  # nothing? pretend bad SNR
     return 20.0 * np.log10(power_ecg / power_noise)
+
+
+def fix_ecg_peaks(ecg, plt=None):
+    ecg = ecg.copy()
+
+    slopesize = int(ecg.fps / 45.0)
+
+    # climb to maxima, and invert if necessary
+    ecgidx = [max(i - slopesize, 0) + np.argmax(ecg.x[max(i - slopesize, 0):min(i + slopesize, len(ecg.x) - 1)]) for i in ecg.ibeats]
+    beatheight = np.mean(ecg.x[ecgidx]) - np.mean(ecg.x) # average detected beat amplitude
+    negecgidx = [max(i - slopesize, 0) + np.argmin(ecg.x[max(i - slopesize, 0):min(i + slopesize, len(ecg.x) - 1)]) for i in ecg.ibeats]
+    negbeatheight = np.mean(ecg.x[negecgidx]) - np.mean(ecg.x)  # average detected beat amplitude in the other direction
+    if np.abs(negbeatheight) > np.abs(beatheight): # if the other direction has "higher" peaks, invert signal
+        ecg.x *= -1
+        ecgidx = negecgidx
+
+    if plt != None:
+        plt.plot(ecg.t, ecg.x)
+        plt.scatter(ecg.t[ecg.ibeats], ecg.x[ecg.ibeats], 30, 'y')
+
+    window = slopesize / 2
+    fixed_indices, fixed_times = [], []
+    # loop through and linearly interpolate peak flanks
+    for i in ecgidx:
+        up_start = i
+        while ecg.x[up_start] >= ecg.x[i] and up_start > i - slopesize: # make sure start is in trough, not still on peak / plateau
+            up_start -= 1
+        up_start -= slopesize
+        while ecg.x[up_start + 1] <= ecg.x[up_start] and up_start < i - 1: # climb past noise (need to go up)
+            up_start += 1
+        up_end = i + 2
+        while ecg.x[up_end - 1] >= ecg.x[up_end] and up_end > i + 1: # climb past noise (need to go up)
+            up_end -= 1
+        upidx = np.arange(up_start, up_end) # indices of upslope
+
+        down_start = i
+        down_end = i
+        while ecg.x[down_end] >= ecg.x[i] and down_end < i + slopesize: # make sure end is in trough, not still on peak / plateau
+            down_end += 1
+        down_end += slopesize
+        while ecg.x[down_start + 1] >= ecg.x[down_start] or ecg.x[down_start + 2] >= ecg.x[down_start] and down_start < down_end: # climb past noise (need to go down)
+            down_start += 1
+        while ecg.x[down_end - 1] <= ecg.x[down_end] and down_end > down_start: # climb past noise (need to go down)
+            down_end -= 1
+        downidx = np.arange(down_start, down_end) # indices of downslope
+
+        if len(ecg.t[upidx]) <= 1 or len(ecg.t[downidx]) <= 1: # one or both flanks missing. just use max
+            reali = i
+            bestt = ecg.t[i]
+        else:
+            # interpolate flanks
+            model1 = TheilSenRegressor().fit(ecg.t[upidx].reshape(-1, 1), ecg.x[upidx])
+            model2 = TheilSenRegressor().fit(ecg.t[downidx].reshape(-1, 1), ecg.x[downidx])
+            k1, d1 = model1.coef_[0], model1.intercept_
+            k2, d2 = model2.coef_[0], model2.intercept_
+            angle1, angle2 = np.arctan(k1), np.arctan(k2)
+            if False:
+                pass
+            else:
+                bestt = (d2 - d1) / (k1 - k2) # obtain intersection point (noise robust peak)
+
+                if np.abs(bestt - ecg.t[i]) > slopesize or np.abs(angle1) < 0.1 or np.abs(angle2) < 0.1: # calculated intersection point is very far from max - something went wrong - reset
+                    print("fix_ecg_peaks WARNING: fixed beat is very far from actual maximum, or slopes suspiciously unsteep. Taking actual maximum to be safe")
+                    i = max(i - slopesize, 0) + np.argmax(ecg.x[max(i - slopesize, 0):min(i + slopesize, len(ecg.x) - 1)])
+                    if plt != None:
+                        reali = i - window + np.argmin(np.abs(ecg.t[(i - window):(i + window)] - bestt))
+                        plt.scatter(bestt, ecg.x[reali], 200, 'y')
+                        plt.scatter(ecg.t[i], ecg.x[i], 200, 'g')
+                        plt.plot([bestt, ecg.t[i]], [ecg.x[reali], ecg.x[i]], 'r', linewidth=2)
+
+                    reali = i
+                    bestt = ecg.t[i]
+                else:
+                    reali = i - window + np.argmin(np.abs(ecg.t[(i - window):(i + window)] - bestt))
+
+        # store fixed times and indices
+        fixed_indices.append(reali)
+        fixed_times.append(bestt)
+
+        if plt != None:
+            # plot
+            plt.plot(ecg.t[upidx], ecg.x[upidx], 'g')
+            plt.plot(ecg.t[downidx], ecg.x[downidx], 'm')
+
+            if len(upidx) > 1 and len(downidx) > 1:
+                plt.plot(ecg.t[upidx], model1.predict(ecg.t[upidx].reshape(-1, 1)), '--k')
+                plt.plot(ecg.t[downidx], model2.predict(ecg.t[downidx].reshape(-1, 1)), '--y')
+
+            plt.scatter(ecg.t[reali], ecg.x[reali], 60, 'r')
+            plt.scatter(bestt, ecg.x[reali], 90, 'k')
+
+    ecg.tbeats = np.ravel(fixed_times)
+    ecg.ibeats = np.ravel(fixed_indices).astype(int)
+
+    return ecg
