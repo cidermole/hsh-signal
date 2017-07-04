@@ -397,6 +397,14 @@ class AppData:
         doctor = self.meta_data['doctor']
         return doctor['text'].replace('\n', ' ')
 
+    def lock_time(self):
+        if 'lock_time' in self.meta_data:
+            # on android client v0.5.0+
+            return self.meta_data['lock_time']
+        else:
+            # on kivy client
+            return 5.0
+
     def model(self):
         return self.meta_data['app_info']['install_android_versions']['Build.MODEL'] if ('app_info' in self.meta_data and 'install_android_versions' in self.meta_data['app_info'] and 'Build.MODEL' in self.meta_data['app_info']['install_android_versions']) else None
 
