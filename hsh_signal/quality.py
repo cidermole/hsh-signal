@@ -63,6 +63,12 @@ class QsqiPPG(HeartSeries):
             raise QsqiError('template 2 length == 0, cowardly refusing to do signal quality analysis')
         return template_2
 
+    def slice(self, s, e):
+        #return self.x[s:e]
+        idxs = np.linspace(s, e, int(e-s), False)
+        iidxs = np.arange(int(s), int(e))
+        return np.interp(idxs, iidxs, self.x[iidxs])
+
     def slices(self, method='direct', L=30):
         if method == 'fixed':
             return np.array(slices(self.x, self.ibeats, hwin=int(self.L*self.fps/2.)))
@@ -72,10 +78,10 @@ class QsqiPPG(HeartSeries):
                 # need to center window on the beat, just like the template
                 s,e = self.ibeats[i], self.ibeats[i+1]
                 l = e-s
-                s,e = max(int(s-l/2.), 0), min(int(e-l/2.), len(self.x))
+                s,e = max(s-l/2., 0), min(e, len(self.x))
                 if s != e:
                     #plt.plot(self.x[s:e])
-                    rez = self.resample(self.x[s:e], L=L)
+                    rez = self.resample(self.slice(s,e), L=L)
                 """plt.plot(rez)
                 plt.title(cross_corr(rez, self.template))
                 plt.show()
