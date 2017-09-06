@@ -12,7 +12,8 @@ from .pickling import load_zipped_pickle
 from .alivecor import decode_alivecor, beatdet_alivecor, load_raw_audio
 from .signal import evenly_resample, highpass
 from .heartseries import Series
-from .ppg import ppg_beatdetect_brueser, ppg_beatdetect_getrr
+from .ppg import ppg_beatdetect_brueser, ppg_beatdetect_getrr, beatdet_getrr_v2
+from hsh_signal.quality import QsqiPPG, QsqiError
 from .ecg import ecg_snr
 
 import requests
@@ -337,6 +338,45 @@ class AppData:
 
         return ppg
 
+    def qsqi(self):
+        self.series_data.load()
+        ppg_data = self.series_data['ppg_data']  # (N,4) matrix with [t,r,g,b] rows
+        times, series = ppg_data[:,0], ppg_data[:,1]  # red channel
+        # note: these are from second 0 of the measurement, i.e. first part is noisy!!!
+
+        #print times
+        #print series
+
+        if 'lock_time' in self.meta_data:
+            # on android client v0.5.0+
+            lock_time = self.meta_data['lock_time']
+        else:
+            # on kivy client
+            lock_time = 5.0
+
+        # cut off the first 5 seconds for classification, just like in the v1 /rawrfclassify API
+        data = evenly_resample(times, series)
+        istart = np.where(times - times[0] > lock_time)[0][0] if len(np.where(times - times[0] > lock_time)[0]) > 0 else 0
+        data = data[istart:,:]
+
+        # 30 FPS hardcoded
+        ibi, filtered, idxs, tbeats = beatdet_getrr_v2(data, get_tbeats=True)
+        tbeats = np.array(tbeats)/1e3
+
+        #print 'idxs', idxs
+        #print 'tbeats', tbeats
+
+        try:
+            QsqiPPG.BEAT_THR = 0.25
+            #sq = QsqiPPG.from_series_data(data[:,1], idx)
+            sq = QsqiPPG.from_series_data(data[:,1], (tbeats - data[0,0]) * 30.0)
+        except QsqiError as e:
+            print e
+            return None
+
+        # to do: this is FPS quantized, like all using beatdet_getrr_v2() - including server's SQI, ppg_parse_beatdetect() etc.
+        return sq
+
     def ecg_ppg_aligned(self):
         """>>> ecg, ppg, ecg_ibs, ppg_ibs = ad.ecg_ppg_aligned()"""
         import sys
@@ -408,6 +448,12 @@ class AppData:
     def model(self):
         return self.meta_data['app_info']['install_android_versions']['Build.MODEL'] if ('app_info' in self.meta_data and 'install_android_versions' in self.meta_data['app_info'] and 'Build.MODEL' in self.meta_data['app_info']['install_android_versions']) else None
 
+    def mf(self):
+        return os.path.basename(self.meta_filename)
+
+    def start_time(self):
+        return self.meta_data['start_time']
+
     def app_id(self):
         return self.meta_data['app_info']['id']
 
@@ -424,7 +470,7 @@ class AppData:
         doctor = self.meta_data['doctor']
         if 'details' in doctor:
             details = doctor['details']
-            if details['cad'] or details['afib']:
+            if details['cad'] or ('afib' in details and details['afib']):
                 return True
         return False
 
@@ -439,7 +485,7 @@ class AppData:
         doctor = self.meta_data['doctor']
         if 'details' in doctor:
             details = doctor['details']
-            if details[dtype]:
+            if dtype in details and details[dtype]:
                 return True
             if not self.has_diagnosis():
                 return None
@@ -464,7 +510,9 @@ class AppData:
             return None
         if not ftype in details:
             return None
-        return details[ftype]  # string!
+        if ftype == 'age':
+            return int(details[ftype]) if details[ftype] != '' else None
+        return details[ftype]
 
     def age(self):
         return self._age_or_gender('age')
