@@ -14,6 +14,8 @@ from .signal import evenly_resample, highpass
 from .heartseries import Series
 from .ppg import ppg_beatdetect_brueser, ppg_beatdetect_getrr, beatdet_getrr_v2
 from hsh_signal.quality import QsqiPPG, QsqiError
+from scipy.interpolate import interp1d
+from hsh_signal.signal import localmax, lowpass
 from .ecg import ecg_snr
 
 import requests
@@ -99,6 +101,122 @@ def audio_filename(audio_base, meta_data):
         if os.path.exists(an):
             return an
     return ans[0]
+
+
+class AixParseError(Exception):
+    def __init__(self, *args, **kwargs):
+        super(AixParseError, self).__init__(*args, **kwargs)
+
+
+class Aix(object):
+    def __init__(self, beat_template):
+        self.template = beat_template
+        self.parse()
+
+    def plot(self):
+        beat_fine = self.beat_fine
+        t_fine = self.t_fine
+        dbeat_dt = np.diff(beat_fine)
+        dbeat_dt2 = np.diff(np.diff(beat_fine))
+        dbeat_dt2_smooth = lowpass(dbeat_dt2, fps=300., cf=10.0, tw=2.)
+
+        fig, ax = plt.subplots(2, sharex=True)
+        ax[0].plot(self.t, self.beat_shape)
+        ax[0].plot(t_fine, beat_fine, 'r')
+        # ax[1].plot(t[:-1], np.diff(beatshape), 'r')
+        ax[1].plot(t_fine[:-1], dbeat_dt * 10, 'b')
+        ax[1].plot(t_fine[:-2], dbeat_dt2 * 100, 'k')
+        ax[1].plot(t_fine[:-2], dbeat_dt2_smooth * 100, 'y')
+        ax[1].scatter([t_fine[self.imin]], [(dbeat_dt2_smooth * 100)[self.imin]], c='g')  # chosen local minimum
+        ax[0].scatter([t_fine[self.imin]], [beat_fine[self.imin]], c='g')  # chosen local minimum
+
+        #
+
+        reflection_peak = beat_fine[self.imin]
+        islope_max = np.argmax(dbeat_dt)
+        zxings = np.where(localmax(-np.abs(dbeat_dt)))[0]
+        iforward_peak = zxings[np.where(zxings > islope_max)[0][0]]
+        forward_peak = beat_fine[iforward_peak]
+        ax[0].scatter([t_fine[iforward_peak]], [forward_peak], c='k')  # forward wave maximum
+
+        ifoot2 = np.argmin(beat_fine)
+        foot2 = beat_fine[ifoot2]
+        ax[0].scatter([t_fine[ifoot2]], [foot2], c='b')  # foot
+
+        # or, it could also be the maximum of second derivative -- more stable?!
+        #ifoot3 = np.argmax(dbeat_dt2[:len(dbeat_dt2) * 2 // 3])
+        ifoot3 = np.argmax(dbeat_dt2_smooth[:len(dbeat_dt2) * 2 // 3])
+
+        foot3 = beat_fine[ifoot3]
+        ax[0].scatter([t_fine[ifoot3]], [foot3], c='r')  # foot
+
+    def parse(self):
+        # shift concat template vertically so the lines fit neatly
+        # beatshape = -1 * np.concatenate((sq.template[:-1], -sq.template[0] + sq.template[-1] + sq.template))[:-len(sq.template) / 2] # always inverted on mobile
+        beat_shape = self.template
+        t = np.linspace(0.0, len(beat_shape) / 30.0, len(beat_shape), False)
+        t_fine = np.linspace(0.0, t[-1], len(beat_shape) * 10, False)
+        self.t, self.t_fine, self.beat_shape = t, t_fine, beat_shape
+
+        bsp = interp1d(t, beat_shape, kind='cubic')
+        beat_fine = bsp(t_fine)
+        self.beat_fine = beat_fine
+
+        # looking for diastolic peak -- see Elgendi 2012, Fig 15. (b)
+
+        dbeat_dt = np.diff(beat_fine)
+
+        # look for local minimum in second derivative.
+        dbeat_dt2 = np.diff(np.diff(beat_fine))
+        dbeat_dt2_smooth = lowpass(dbeat_dt2, fps=300., cf=10.0, tw=2.)
+
+        ipeak = np.argmax(beat_fine)  # TODO: what if first peak is not the highest?
+        ifoot = np.argmin(beat_fine[ipeak:]) + ipeak
+
+        ilocalmin = np.where(localmax(-dbeat_dt2_smooth))[0]
+        ilocalmin = ilocalmin[np.where(ilocalmin > ipeak)[0]]
+        ilocalmin = ilocalmin[np.where(ilocalmin < ifoot)[0]]
+
+        # TODO: catch errors
+
+        # find lowest local minimum
+        # TODO: better: find the first local minimum after the localmax plateau
+        #imin = ilocalmin[np.argmin(dbeat_dt2[ilocalmin])]
+        imin = ilocalmin[np.argmin(dbeat_dt2_smooth[ilocalmin])]
+
+        # TODO: stability estimates. on the smoothed curve, how much wiggling room is there, how clear=pronounced is the minimum?
+
+        # TODO: fit to all data points (slices), instead of just to the mean!
+
+        # TODO: count zero crossings of dbeat_dt2 -- first local minimum after plateau (plateau = signal already been above zxing)
+
+        self.imin = imin
+
+
+        reflection_peak = beat_fine[imin]
+        islope_max = np.argmax(dbeat_dt)
+        zxings = np.where(localmax(-np.abs(dbeat_dt)))[0]
+        iforward_peak = zxings[np.where(zxings > islope_max)[0][0]]
+        forward_peak = beat_fine[iforward_peak]
+        #ax[0].scatter([t_fine[iforward_peak]], [forward_peak], c='k')  # forward wave maximum
+
+        ifoot2 = np.argmin(beat_fine)
+        foot2 = beat_fine[ifoot2]
+        #ax[0].scatter([t_fine[ifoot2]], [foot2], c='b')  # foot
+
+        # or, it could also be the maximum of second derivative -- more stable?!
+        ifoot3 = np.argmax(dbeat_dt2[:len(dbeat_dt2) * 2 // 3])
+        foot3 = beat_fine[ifoot3]
+        #ax[0].scatter([t_fine[ifoot3]], [foot3], c='r')  # foot
+
+        aix2 = (forward_peak - reflection_peak) / (forward_peak - foot2)
+        aix3 = (forward_peak - reflection_peak) / (forward_peak - foot3)
+
+        #hrs.append(hr)
+        #aixs.append(aix3)
+        self.aix2 = aix2
+        self.aix3 = aix3
+
 
 class LazyDict(dict):
     """avoids unpickling a lot of data, unless we actually need it."""
@@ -376,6 +494,19 @@ class AppData:
 
         # to do: this is FPS quantized, like all using beatdet_getrr_v2() - including server's SQI, ppg_parse_beatdetect() etc.
         return sq
+
+    def aix(self):
+        ppg = self.ppg_parse_beatdetect('getrr', use_cache=False)
+        try:
+            sq = self.qsqi()
+        except IndexError as e:
+            # trying to access ibeats[-1]
+            raise AixParseError(e)
+        except Warning:
+            # File "/mnt/hsh/hsh-beatdet/hsh_beatdet/ML/ppg_beatdetector_v2.py", line 66, in getrr_v2
+            # raise Warning("Warning: Tiny data shape", data.shape[0])
+            raise AixParseError(e)
+        return Aix(-1 * sq.template)
 
     def ecg_ppg_aligned(self):
         """>>> ecg, ppg, ecg_ibs, ppg_ibs = ad.ecg_ppg_aligned()"""
