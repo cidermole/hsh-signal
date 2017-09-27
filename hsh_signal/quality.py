@@ -47,8 +47,9 @@ def sqi_slices(sig, method='direct',L=30):
             s, e = self.ibeats[i], self.ibeats[i + 1]
             l = e - s
             assert l > 0, "ibeats must be strictly ascending"
-            #s, e = max(s - l * 0.1, 0), max(min(e - l * 0.1, len(self.x)), 0)
+            # s,e = max(s-l*0.1, 0), max(min(e-l*0.1, len(self.x)), 0)
             s, e = max(s - l * 0.2, 0), max(min(e, len(self.x)), 0)
+
             if s != e:
                 # plt.plot(self.x[s:e])
                 # rez = sig_pad(sig_slice(self.x,s,e), L=L)
@@ -86,14 +87,18 @@ def sqi_slices(sig, method='direct',L=30):
             raise ValueError('while slicing: ibi model len_max limit assumption violated.')
 
         # actual model is more robust (uses boundary-percentile limits instead of median)
-        model_len_max = np.percentile(lens_ok, 100.0 * perc) * (1.0 + rel_dev_limit)
+        model_len_max = np.percentile(lens_ok, 100.0 * (1.0 - perc)) * (1.0 + rel_dev_limit)
         model_len_min = np.percentile(lens_ok, 100.0 * perc) * (1.0 - rel_dev_limit)
+        model_len_bottom = np.percentile(lens_ok, 100.0 * perc)
+        print 'model_len_bottom', model_len_bottom
         print 'model_len_min', model_len_min, 'model_len_max', model_len_max
         lens_ok = lens_ok[np.where(lens_ok < model_len_max)[0]]
         print 'lens_ok', len(lens_ok)
         lens_ok = lens_ok[np.where(lens_ok > model_len_min)[0]]
         print 'lens_ok', len(lens_ok)
-        Lmax = max(lens_ok)
+        # Lmax = max(lens_ok)
+        # model_len_bottom: almost all waveshapes should still be present for the mean calculation.
+        Lmax = int(model_len_bottom)
         print 'Lmax=', Lmax
         return [sig_pad(s, L=Lmax) for s in slicez]
 
