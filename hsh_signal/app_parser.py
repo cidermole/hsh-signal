@@ -455,6 +455,7 @@ class AppData:
         if type == 'brueser':
             ppg = ppg_beatdetect_brueser(self.ppg_parse())
         elif type == 'getrr':
+            # note the hidden highpass -- it is in ppg_beatdetect_getrr() -> beatdet()
             ppg = ppg_beatdetect_getrr(self.ppg_raw())
         else:
             raise ValueError('type must be one of brueser|getrr')

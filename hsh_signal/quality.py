@@ -47,7 +47,7 @@ def sig_pad(sig, L):
     return np.pad(sig, (0, L - len(sig)), mode='edge')
 
 
-def sqi_slices(sig, method='direct',L=30):
+def sqi_slices(sig, method='direct'):
     if method == 'fixed':
         slicez = []
         for i in range(len(sig.ibeats) - 1):
@@ -119,7 +119,7 @@ def sqi_slices(sig, method='direct',L=30):
             s,e = max(s-l/2., 0), min(e, len(sig.x))
             if s != e:
                 #plt.plot(sig.x[s:e])
-                rez = sig_resample(sig_slice(sig.x,s,e), L=L)
+                rez = sig_resample(sig_slice(sig.x,s,e), L=30)
             """plt.plot(rez)
             plt.title(cross_corr(rez, sig.template))
             plt.show()
@@ -153,10 +153,18 @@ class QsqiPPG(HeartSeries):
 
     @staticmethod
     def from_heart_series(hs):
+        """
+        caution! input must be one-sided, i.e. must NOT be DC free.
+        (otherwise, correlation will fail to provide high enough values for CC_THR)
+        """
         return QsqiPPG(hs.x, hs.ibeats, fps=hs.fps, lpad=hs.lpad)
 
     @staticmethod
     def from_series_data(signal, idx, fps=30, lpad=0):
+        """
+        caution! input must be one-sided, i.e. must NOT be DC free.
+        (otherwise, correlation will fail to provide high enough values for CC_THR)
+        """
         return QsqiPPG(signal, idx, fps=fps, lpad=lpad)
 
     def beat_template(self):
@@ -179,7 +187,7 @@ class QsqiPPG(HeartSeries):
         # between upper 90th percentile curve, and lower 10th percentile curve)
 
     def slices(self, method='direct'):
-        return sqi_slices(self, method, L=30)
+        return sqi_slices(self, method)
 
     def sqi1(self):
         """direct matching (fiducial + length L template correlation)"""
