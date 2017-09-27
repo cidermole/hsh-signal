@@ -26,6 +26,20 @@ class Series(object):
     def copy(self):
         return Series(self.x, self.fps, self.lpad)
 
+    def upsample(self, ratio=10):
+        ratio, fps = int(ratio), self.fps
+        xu, iu = np.zeros(len(self.x)*ratio), np.arange(0, len(self.x)*ratio, ratio)
+        for i in range(ratio):
+            xu[iu+i] = np.array(self.x)
+        import matplotlib.pyplot as plt
+        #plt.plot(xu)
+        from hsh_signal.signal import lowpass_fft
+        #print fps*ratio
+        xu = lowpass_fft(xu, fps*ratio, cf=(fps/2.0), tw=(fps/8.0)) # * ratio
+        #plt.plot(xu)
+        #plt.show()
+        return Series(xu, fps*ratio, self.lpad*ratio)
+
     def slice(self, s):
         return HeartSeries(self.x[s], self.ibeats[s], self.fps, self.lpad)
 
@@ -70,6 +84,57 @@ class HeartSeries(Series):
 
     def copy(self):
         return HeartSeries(self.x, self.ibeats, self.fps, self.lpad)
+
+    def upsample(self, ratio=10):
+        ratio, fps = int(ratio), self.fps
+        xu, iu = np.zeros(len(self.x) * ratio), np.arange(0, len(self.x) * ratio, ratio)
+        #xu[iu] = np.array(self.x)
+        for i in range(ratio):
+            xu[iu+i] = np.array(self.x)
+        from hsh_signal.signal import lowpass_fft
+        #xu = lowpass_fft(xu, fps * ratio, cf=(fps * ratio / 2.0), tw=(fps * ratio / 16.0)) * ratio
+        xu = lowpass_fft(xu, fps * ratio, cf=(fps / 2.0), tw=(fps / 8.0))  # * ratio
+        return HeartSeries(xu, self.ibeats * ratio, fps * ratio, self.lpad * ratio)
+
+    def beat_baseline(self):
+        xu = np.zeros(len(self.x))
+        fps = self.fps
+        ibeats = self.ibeats.astype(int)
+
+
+        # where long periods without beats, we need support from raw average (~baseline)
+        ibis = np.diff(self.tbeats)
+        median_ibi = np.median(ibis)
+        long_ibis = np.where(ibis > 1.5 * median_ibi)[0]
+        print 'long_ibis', long_ibis
+        ib_start = self.ibeats[long_ibis]
+        ib_end = self.ibeats[np.clip(long_ibis+1, 0, len(self.ibeats))]
+        if len(ib_end) < len(ib_start): ib_end = np.insert(ib_end, len(ib_end), len(self.x)-1)
+        # iterate over long holes and fill them with fake ibis
+        # to do: actually use raw average baseline, not some random value at a picked index
+        extra_ibeats = []
+        for s,e in zip(ib_start, ib_end):
+            print 's,e',s,e,self.t[s],self.t[e]
+            extra_ibeats += list(np.arange(s + fps * median_ibi, e - 0.5 * median_ibi * fps, fps * median_ibi).astype(int))
+
+        print 'extra_ibeats',extra_ibeats, 'extra_tbeats',self.t[extra_ibeats]
+
+        ibeats = np.array(sorted(list(ibeats) + list(extra_ibeats)))
+        xu[ibeats] = self.x[ibeats]
+
+        from scipy.interpolate import interp1d
+        #xu = interp1d(ibeats, self.x[ibeats], kind='linear', bounds_error=False, fill_value='extrapolate')(np.arange(len(xu)))
+        #for i, j in pairwise(ibeats):
+            #xu[i:j] = self.x[i]
+        # boundary constants
+        xu[0:ibeats[0]] = xu[ibeats[0]]
+        xu[ibeats[-1]:] = xu[ibeats[-1]]
+        from hsh_signal.signal import lowpass_fft
+        scaling = float(len(xu))/len(ibeats)
+        xu = lowpass_fft(xu, fps, cf=0.1, tw=0.05) * scaling  # * ratio
+        # plt.plot(xu)
+        # plt.show()
+        return HeartSeries(xu, self.ibeats, self.fps, self.lpad)
 
     def shift(self, dt):
         """add a time shift in seconds, moving the signal to the left."""
