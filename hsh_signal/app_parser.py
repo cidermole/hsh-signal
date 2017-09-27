@@ -103,12 +103,12 @@ def audio_filename(audio_base, meta_data):
     return ans[0]
 
 
-class AixParseError(Exception):
+class BeatParseError(Exception):
     def __init__(self, *args, **kwargs):
-        super(AixParseError, self).__init__(*args, **kwargs)
+        super(BeatParseError, self).__init__(*args, **kwargs)
 
 
-class Aix(object):
+class BeatShape(object):
     def __init__(self, beat_template):
         self.template = beat_template
         self.parse()
@@ -149,6 +149,7 @@ class Aix(object):
 
         foot3 = beat_fine[ifoot3]
         ax[0].scatter([t_fine[ifoot3]], [foot3], c='r')  # foot
+        return fig
 
     def parse(self):
         # shift concat template vertically so the lines fit neatly
@@ -174,8 +175,13 @@ class Aix(object):
         ifoot = np.argmin(beat_fine[ipeak:]) + ipeak
 
         ilocalmin = np.where(localmax(-dbeat_dt2_smooth))[0]
+        #print 'localmax found',len(ilocalmin)
         ilocalmin = ilocalmin[np.where(ilocalmin > ipeak)[0]]
         ilocalmin = ilocalmin[np.where(ilocalmin < ifoot)[0]]
+        #print 'between ipeak=', ipeak, 'and ifoot=', ifoot, 'we have', len(ilocalmin)
+
+        if len(ilocalmin) == 0:
+            raise BeatParseError('peak and foot not found')
 
         # TODO: catch errors
 
@@ -196,7 +202,10 @@ class Aix(object):
         reflection_peak = beat_fine[imin]
         islope_max = np.argmax(dbeat_dt)
         zxings = np.where(localmax(-np.abs(dbeat_dt)))[0]
-        iforward_peak = zxings[np.where(zxings > islope_max)[0][0]]
+        if len(np.where(zxings > islope_max)[0]) == 0:
+            raise BeatParseError('no good zero crossing found')
+        idxing = np.where(zxings > islope_max)[0][0]
+        iforward_peak = zxings[idxing]
         forward_peak = beat_fine[iforward_peak]
         #ax[0].scatter([t_fine[iforward_peak]], [forward_peak], c='k')  # forward wave maximum
 
@@ -495,18 +504,18 @@ class AppData:
         # to do: this is FPS quantized, like all using beatdet_getrr_v2() - including server's SQI, ppg_parse_beatdetect() etc.
         return sq
 
-    def aix(self):
+    def beat_shape(self):
         ppg = self.ppg_parse_beatdetect('getrr', use_cache=False)
         try:
             sq = self.qsqi()
         except IndexError as e:
             # trying to access ibeats[-1]
-            raise AixParseError(e)
+            raise BeatParseError(e)
         except Warning:
             # File "/mnt/hsh/hsh-beatdet/hsh_beatdet/ML/ppg_beatdetector_v2.py", line 66, in getrr_v2
             # raise Warning("Warning: Tiny data shape", data.shape[0])
-            raise AixParseError(e)
-        return Aix(-1 * sq.template)
+            raise BeatParseError(e)
+        return BeatShape(-1 * sq.template)
 
     def ecg_ppg_aligned(self):
         """>>> ecg, ppg, ecg_ibs, ppg_ibs = ad.ecg_ppg_aligned()"""
@@ -591,6 +600,9 @@ class AppData:
     def app_version(self):
         return self.meta_data['app_info']['version'] if ('app_info' in self.meta_data and 'version' in self.meta_data['app_info']) else None
 
+    def app_codename(self):
+        return self.meta_data['app_info']['codename'] if ('app_info' in self.meta_data and 'codename' in self.meta_data['app_info']) else None
+
     def user_name(self):
         """returns empty string if unknown."""
         app_id = self.app_id()
@@ -628,7 +640,11 @@ class AppData:
     def _age_or_gender(self, ftype='age'):
         # new app v0.3 parser (line of apps which always ask for age/gender)
         if 'user' in self.meta_data:
-            return self.meta_data['user'][ftype]
+            if ftype == 'gender':
+                return self.meta_data['user'][ftype]
+            elif ftype == 'age':
+                a = self.meta_data['user'][ftype]
+                return int(a) if (a != '' and a is not None) else None
 
         # old app series v0.1.*
         if not 'doctor' in self.meta_data:
