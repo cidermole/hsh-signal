@@ -39,28 +39,36 @@ def sig_resample(self, sig, L = None):
     return np.interp(t, np.arange(len(sig)), sig)
 
 
+def sig_pad(sig, L):
+    """pad up with zeros to length L on the right. trims if necessary."""
+    if len(sig) > L:
+        # trim
+        return np.array(sig[0:L])
+    return np.pad(sig, (0, L - len(sig)), mode='edge')
+
+
 def sqi_slices(sig, method='direct',L=30):
     if method == 'fixed':
         slicez = []
-        for i in range(len(self.ibeats) - 1):
+        for i in range(len(sig.ibeats) - 1):
             # need to center window on the beat, just like the template
-            s, e = self.ibeats[i], self.ibeats[i + 1]
+            s, e = sig.ibeats[i], sig.ibeats[i + 1]
             l = e - s
             assert l > 0, "ibeats must be strictly ascending"
-            # s,e = max(s-l*0.1, 0), max(min(e-l*0.1, len(self.x)), 0)
-            s, e = max(s - l * 0.2, 0), max(min(e, len(self.x)), 0)
+            # s,e = max(s-l*0.1, 0), max(min(e-l*0.1, len(sig.x)), 0)
+            s, e = max(s - l * 0.2, 0), max(min(e, len(sig.x)), 0)
 
             if s != e:
-                # plt.plot(self.x[s:e])
-                # rez = sig_pad(sig_slice(self.x,s,e), L=L)
-                rez = sig_slice(self.x, s, e)
+                # plt.plot(sig.x[s:e])
+                # rez = sig_pad(sig_slice(sig.x,s,e), L=L)
+                rez = sig_slice(sig.x, s, e)
             """plt.plot(rez)
-            plt.title(cross_corr(rez, self.template))
+            plt.title(cross_corr(rez, sig.template))
             plt.show()
             """
-            slicez.append(rez)  # (self.x[s:e])
-        # s = self.ibeats[-1]
-        # slicez.append(self.resample(self.x[int(s):int(s+self.L*self.fps)], L=30))  # surrogate length for last beat
+            slicez.append(rez)  # (sig.x[s:e])
+        # s = sig.ibeats[-1]
+        # slicez.append(sig.resample(sig.x[int(s):int(s+sig.L*sig.fps)], L=30))  # surrogate length for last beat
 
         # pad up to maximum length (within some reasonable limits)
         # note: when does this break? check IBI distribution, and if too skewed, there is other trouble.
@@ -100,7 +108,7 @@ def sqi_slices(sig, method='direct',L=30):
         # model_len_bottom: almost all waveshapes should still be present for the mean calculation.
         Lmax = int(model_len_bottom)
         print 'Lmax=', Lmax
-        return [sig_pad(s, L=Lmax) for s in slicez]
+        return np.array([sig_pad(s, L=Lmax) for s in slicez])
 
     elif method == 'variable':
         slicez = []
@@ -119,7 +127,7 @@ def sqi_slices(sig, method='direct',L=30):
             slicez.append(rez) #(sig.x[s:e])
         s = sig.ibeats[-1]
         #slicez.append(sig_resample(sig.x[int(s):int(s+sig.L*sig.fps)], L=30))  # surrogate length for last beat
-        return slicez
+        return np.array(slicez)
     else:
         raise ValueError('slices() got unknown method={}'.format(method))
 
@@ -153,7 +161,7 @@ class QsqiPPG(HeartSeries):
 
     def beat_template(self):
         self.L = np.median(np.diff(self.tbeats))
-        slicez = np.array(self.slices(method="variable")) #, hwin=int(self.L*self.fps/2.)))
+        slicez = self.slices(method="fixed") #, hwin=int(self.L*self.fps/2.)))
         template_1 = np.mean(slicez, axis=0)
         #print 'template_1', template_1
         corrs = np.array([cross_corr(sl, template_1) for sl in slicez])
@@ -165,6 +173,10 @@ class QsqiPPG(HeartSeries):
         if len(template_2) == 0:
             raise QsqiError('template 2 length == 0, cowardly refusing to do signal quality analysis')
         return template_2
+
+        # idea from Slices.ipynb -- auto adjust waveshape percentiles
+        # (ensure we are using only a range of waveshapes that actually correlate
+        # between upper 90th percentile curve, and lower 10th percentile curve)
 
     def slices(self, method='direct'):
         return sqi_slices(self, method, L=30)
