@@ -146,33 +146,43 @@ class QsqiPPG(HeartSeries):
     BEAT_THR = 0.3  #: more beats thrown away? fail creating template 2
 
     def __init__(self, *args, **kwargs):
+        init_template = kwargs.pop('init_template', True)
         super(QsqiPPG, self).__init__(*args, **kwargs)
-        self.template = self.beat_template()
+        if init_template:
+            self.init_template()
+
+    def init_template(self):
+        self.beat_template_1()
+        self.template = self.beat_template_2()
         self.template_kurtosis = kurtosis(self.template)
         self.template_skewness = skewness(self.template)
 
     @staticmethod
-    def from_heart_series(hs):
+    def from_heart_series(hs, init_template=True):
         """
         caution! input must be one-sided, i.e. must NOT be DC free.
         (otherwise, correlation will fail to provide high enough values for CC_THR)
         """
-        return QsqiPPG(hs.x, hs.ibeats, fps=hs.fps, lpad=hs.lpad)
+        return QsqiPPG(hs.x, hs.ibeats, fps=hs.fps, lpad=hs.lpad, init_template=init_template)
 
     @staticmethod
-    def from_series_data(signal, idx, fps=30, lpad=0):
+    def from_series_data(signal, idx, fps=30, lpad=0, init_template=True):
         """
         caution! input must be one-sided, i.e. must NOT be DC free.
         (otherwise, correlation will fail to provide high enough values for CC_THR)
         """
-        return QsqiPPG(signal, idx, fps=fps, lpad=lpad)
+        return QsqiPPG(signal, idx, fps=fps, lpad=lpad, init_template=init_template)
 
-    def beat_template(self):
+    def beat_template_1(self):
         self.L = np.median(np.diff(self.tbeats))
         slicez = self.slices(method="fixed") #, hwin=int(self.L*self.fps/2.)))
         template_1 = np.mean(slicez, axis=0)
         #print 'template_1', template_1
         corrs = np.array([cross_corr(sl, template_1) for sl in slicez])
+        self.slicez, self.template_1, self.corrs = slicez, template_1, corrs
+
+    def beat_template_2(self):
+        slicez, template_1, corrs = self.slicez, self.template_1, self.corrs
         #print 'corrs', corrs
         good_corrs = np.where(corrs > QsqiPPG.CC_THR)[0]
         if len(good_corrs) < QsqiPPG.BEAT_THR * len(corrs):
@@ -180,11 +190,13 @@ class QsqiPPG(HeartSeries):
         template_2 = np.mean(slicez[good_corrs], axis=0)
         if len(template_2) == 0:
             raise QsqiError('template 2 length == 0, cowardly refusing to do signal quality analysis')
-        return template_2
 
-        # idea from Slices.ipynb -- auto adjust waveshape percentiles
+        # unimplemented idea from Slices.ipynb:
+        # auto adjust waveshape percentiles
         # (ensure we are using only a range of waveshapes that actually correlate
         # between upper 90th percentile curve, and lower 10th percentile curve)
+
+        return template_2
 
     def slices(self, method='direct'):
         return sqi_slices(self, method)
