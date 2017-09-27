@@ -518,6 +518,13 @@ class AppData:
             raise BeatParseError(e)
         return BeatShape(-1 * sq.template)
 
+    def ppg_footed(self):
+        """return upsampled and footed (detrended) PPG."""
+        from hsh_signal.waveshape import ppg_wave_foot
+        ppg_raw_l = self.ppg_raw()
+        ppg_l = self.ppg_parse_beatdetect('getrr')
+        return ppg_wave_foot(ppg_raw_l, ppg_l)
+
     def ecg_ppg_aligned(self):
         """>>> ecg, ppg, ecg_ibs, ppg_ibs = ad.ecg_ppg_aligned()"""
         import sys
