@@ -41,7 +41,62 @@ def sig_resample(self, sig, L = None):
 
 def sqi_slices(sig, method='direct',L=30):
     if method == 'fixed':
-        return np.array(slices(sig.x, sig.ibeats, hwin=int(L*sig.fps/2.)))
+        slicez = []
+        for i in range(len(self.ibeats) - 1):
+            # need to center window on the beat, just like the template
+            s, e = self.ibeats[i], self.ibeats[i + 1]
+            l = e - s
+            assert l > 0, "ibeats must be strictly ascending"
+            #s, e = max(s - l * 0.1, 0), max(min(e - l * 0.1, len(self.x)), 0)
+            s, e = max(s - l * 0.2, 0), max(min(e, len(self.x)), 0)
+            if s != e:
+                # plt.plot(self.x[s:e])
+                # rez = sig_pad(sig_slice(self.x,s,e), L=L)
+                rez = sig_slice(self.x, s, e)
+            """plt.plot(rez)
+            plt.title(cross_corr(rez, self.template))
+            plt.show()
+            """
+            slicez.append(rez)  # (self.x[s:e])
+        # s = self.ibeats[-1]
+        # slicez.append(self.resample(self.x[int(s):int(s+self.L*self.fps)], L=30))  # surrogate length for last beat
+
+        # pad up to maximum length (within some reasonable limits)
+        # note: when does this break? check IBI distribution, and if too skewed, there is other trouble.
+        # (e.g. median IBI does not fit this assumed distribution? -> exit with an error message)
+        lens_ok = np.array([len(s) for s in slicez])
+        print 'lens_ok', len(lens_ok)
+
+        #
+        # IBI length limiter.
+        #
+        # Filters bad interval lengths for
+        # 1) removal from the beatshape average
+        # 2) beatshape window size (maximum reasonable IBI length)
+        #
+
+        # model limit assumption:
+        # say 300 ms SDNN on a 800 ms RR -> 0.38
+        rel_dev_limit = 0.38
+        perc = 0.1
+        len_min, len_max = np.median(lens_ok) * (1.0 - rel_dev_limit), np.median(lens_ok) * (1.0 + rel_dev_limit)
+        if np.sum(lens_ok < len_min) > perc * len(lens_ok):
+            raise ValueError('while slicing: ibi model len_min limit assumption violated.')
+        if np.sum(lens_ok > len_max) > perc * len(lens_ok):
+            raise ValueError('while slicing: ibi model len_max limit assumption violated.')
+
+        # actual model is more robust (uses boundary-percentile limits instead of median)
+        model_len_max = np.percentile(lens_ok, 100.0 * perc) * (1.0 + rel_dev_limit)
+        model_len_min = np.percentile(lens_ok, 100.0 * perc) * (1.0 - rel_dev_limit)
+        print 'model_len_min', model_len_min, 'model_len_max', model_len_max
+        lens_ok = lens_ok[np.where(lens_ok < model_len_max)[0]]
+        print 'lens_ok', len(lens_ok)
+        lens_ok = lens_ok[np.where(lens_ok > model_len_min)[0]]
+        print 'lens_ok', len(lens_ok)
+        Lmax = max(lens_ok)
+        print 'Lmax=', Lmax
+        return [sig_pad(s, L=Lmax) for s in slicez]
+
     elif method == 'variable':
         slicez = []
         for i in range(len(sig.ibeats)-1):
