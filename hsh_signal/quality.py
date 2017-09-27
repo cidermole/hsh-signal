@@ -7,12 +7,14 @@ from scipy.stats.mstats import spearmanr
 from sklearn.linear_model import TheilSenRegressor
 import time
 
+
 def kurtosis(x):
     # https://en.wikipedia.org/wiki/Kurtosis#Sample_kurtosis
     xm = np.mean(x)
     num = np.mean((x - xm)**4)
     denom = np.mean((x - xm)**2)**2
     return num/denom - 3
+
 
 def skewness(x):
     # https://en.wikipedia.org/wiki/Skewness#Sample_skewness
@@ -21,6 +23,45 @@ def skewness(x):
     num = np.mean((x - xm)**3)
     denom = (1.0/(n-1) * np.sum((x - xm)**2)) ** (3.0 / 2.0)
     return num/denom
+
+
+def sig_slice(x, s, e):
+    #return x[s:e]
+    idxs = np.linspace(s, e, int(e-s), False)
+    iidxs = np.arange(int(s), int(e))
+    return np.interp(idxs, iidxs, x[iidxs])
+
+
+def sig_resample(self, sig, L = None):
+    """resample to length L."""
+    t = np.linspace(0, len(sig), L, endpoint=False)
+    assert len(t) == L
+    return np.interp(t, np.arange(len(sig)), sig)
+
+
+def sqi_slices(sig, method='direct',L=30):
+    if method == 'fixed':
+        return np.array(slices(sig.x, sig.ibeats, hwin=int(L*sig.fps/2.)))
+    elif method == 'variable':
+        slicez = []
+        for i in range(len(sig.ibeats)-1):
+            # need to center window on the beat, just like the template
+            s,e = sig.ibeats[i], sig.ibeats[i+1]
+            l = e-s
+            s,e = max(s-l/2., 0), min(e, len(sig.x))
+            if s != e:
+                #plt.plot(sig.x[s:e])
+                rez = sig_resample(sig_slice(sig.x,s,e), L=L)
+            """plt.plot(rez)
+            plt.title(cross_corr(rez, sig.template))
+            plt.show()
+            """
+            slicez.append(rez) #(sig.x[s:e])
+        s = sig.ibeats[-1]
+        #slicez.append(sig_resample(sig.x[int(s):int(s+sig.L*sig.fps)], L=30))  # surrogate length for last beat
+        return slicez
+    else:
+        raise ValueError('slices() got unknown method={}'.format(method))
 
 
 class QsqiError(RuntimeError): pass
@@ -54,7 +95,9 @@ class QsqiPPG(HeartSeries):
         self.L = np.median(np.diff(self.tbeats))
         slicez = np.array(self.slices(method="variable")) #, hwin=int(self.L*self.fps/2.)))
         template_1 = np.mean(slicez, axis=0)
+        #print 'template_1', template_1
         corrs = np.array([cross_corr(sl, template_1) for sl in slicez])
+        #print 'corrs', corrs
         good_corrs = np.where(corrs > QsqiPPG.CC_THR)[0]
         if len(good_corrs) < QsqiPPG.BEAT_THR * len(corrs):
             raise QsqiError('template 2 would keep only {} good beats of {} detected'.format(len(good_corrs), len(corrs)))
@@ -63,35 +106,8 @@ class QsqiPPG(HeartSeries):
             raise QsqiError('template 2 length == 0, cowardly refusing to do signal quality analysis')
         return template_2
 
-    def slice(self, s, e):
-        #return self.x[s:e]
-        idxs = np.linspace(s, e, int(e-s), False)
-        iidxs = np.arange(int(s), int(e))
-        return np.interp(idxs, iidxs, self.x[iidxs])
-
-    def slices(self, method='direct', L=30):
-        if method == 'fixed':
-            return np.array(slices(self.x, self.ibeats, hwin=int(self.L*self.fps/2.)))
-        elif method == 'variable':
-            slicez = []
-            for i in range(len(self.ibeats)-1):
-                # need to center window on the beat, just like the template
-                s,e = self.ibeats[i], self.ibeats[i+1]
-                l = e-s
-                s,e = max(s-l/2., 0), min(e, len(self.x))
-                if s != e:
-                    #plt.plot(self.x[s:e])
-                    rez = self.resample(self.slice(s,e), L=L)
-                """plt.plot(rez)
-                plt.title(cross_corr(rez, self.template))
-                plt.show()
-                """
-                slicez.append(rez) #(self.x[s:e])
-            s = self.ibeats[-1]
-            #slicez.append(self.resample(self.x[int(s):int(s+self.L*self.fps)], L=30))  # surrogate length for last beat
-            return slicez
-        else:
-            raise ValueError('slices() got unknown method={}'.format(method))
+    def slices(self, method='direct'):
+        return sqi_slices(self, method, L=30)
 
     def sqi1(self):
         """direct matching (fiducial + length L template correlation)"""
@@ -101,20 +117,11 @@ class QsqiPPG(HeartSeries):
         corrs = np.clip(corrs, a_min=0.0, a_max=1.0)
         return corrs
 
-    def resample(self, sig, L = None):
-        """resample to length L sec."""
-        if L == None:
-            L = len(self.template)
-        #t = np.linspace(0, len(sig), int(self.L*self.fps), endpoint=False)
-        t = np.linspace(0, len(sig), L, endpoint=False)
-        # 2*int(self.L*self.fps/2.)+1 or, len(self.template)
-        assert len(t) == L
-        return np.interp(t, np.arange(len(sig)), sig)
-
     def sqi2(self):
         """linear resampling (between two fiducials up to length L, correlation)"""
         slicez = self.slices(method='variable')
-        corrs = np.array([(cross_corr(self.resample(sl), self.template) if len(sl) else 0.0) for sl in slicez])
+        L = len(self.template)
+        corrs = np.array([(cross_corr(sig_resample(sl, L), self.template) if len(sl) else 0.0) for sl in slicez])
         corrs = np.clip(corrs, a_min=0.0, a_max=1.0)
         return corrs
 
