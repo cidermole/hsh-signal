@@ -62,55 +62,21 @@ def sqi_slices(sig, method='direct'):
                 # plt.plot(sig.x[s:e])
                 # rez = sig_pad(sig_slice(sig.x,s,e), L=L)
                 rez = sig_slice(sig.x, s, e)
-            """plt.plot(rez)
-            plt.title(cross_corr(rez, sig.template))
-            plt.show()
-            """
-            slicez.append(rez)  # (sig.x[s:e])
+                """plt.plot(rez)
+                plt.title(cross_corr(rez, sig.template))
+                plt.show()
+                """
+                slicez.append(rez)  # (sig.x[s:e])
         # s = sig.ibeats[-1]
         # slicez.append(sig.resample(sig.x[int(s):int(s+sig.L*sig.fps)], L=30))  # surrogate length for last beat
 
-        # pad up to maximum length (within some reasonable limits)
-        # note: when does this break? check IBI distribution, and if too skewed, there is other trouble.
-        # (e.g. median IBI does not fit this assumed distribution? -> exit with an error message)
-        lens_ok = np.array([len(s) for s in slicez])
-        print 'lens_ok', len(lens_ok)
-
-        #
-        # IBI length limiter.
-        #
-        # Filters bad interval lengths for
-        # 1) removal from the beatshape average
-        # 2) beatshape window size (maximum reasonable IBI length)
-        #
-
-        # model limit assumption:
-        # say 300 ms SDNN on a 800 ms RR -> 0.38
-        rel_dev_limit = 0.38
-        perc = 0.1
-        len_min, len_max = np.median(lens_ok) * (1.0 - rel_dev_limit), np.median(lens_ok) * (1.0 + rel_dev_limit)
-        if np.sum(lens_ok < len_min) > perc * len(lens_ok):
-            raise ValueError('while slicing: ibi model len_min limit assumption violated.')
-        if np.sum(lens_ok > len_max) > perc * len(lens_ok):
-            raise ValueError('while slicing: ibi model len_max limit assumption violated.')
-
-        # actual model is more robust (uses boundary-percentile limits instead of median)
-        model_len_max = np.percentile(lens_ok, 100.0 * (1.0 - perc)) * (1.0 + rel_dev_limit)
-        model_len_min = np.percentile(lens_ok, 100.0 * perc) * (1.0 - rel_dev_limit)
-        model_len_bottom = np.percentile(lens_ok, 100.0 * perc)
-        print 'model_len_bottom', model_len_bottom
-        print 'model_len_min', model_len_min, 'model_len_max', model_len_max
-        lens_ok = lens_ok[np.where(lens_ok < model_len_max)[0]]
-        print 'lens_ok', len(lens_ok)
-        lens_ok = lens_ok[np.where(lens_ok > model_len_min)[0]]
-        print 'lens_ok', len(lens_ok)
-        # Lmax = max(lens_ok)
-        # model_len_bottom: almost all waveshapes should still be present for the mean calculation.
-        Lmax = int(model_len_bottom)
-        print 'Lmax=', Lmax
-        return np.array([sig_pad(s, L=Lmax) for s in slicez])
+        # not an np.array() since the slice lengths are different!
+        # use sqi_remove_ibi_outliers() to pad/trim the lengths.
+        return slicez
 
     elif method == 'variable':
+        # to do: unused. sunset this! (post-processing is written for method='fixed')
+
         slicez = []
         for i in range(len(sig.ibeats)-1):
             # need to center window on the beat, just like the template
@@ -127,9 +93,92 @@ def sqi_slices(sig, method='direct'):
             slicez.append(rez) #(sig.x[s:e])
         s = sig.ibeats[-1]
         #slicez.append(sig_resample(sig.x[int(s):int(s+sig.L*sig.fps)], L=30))  # surrogate length for last beat
-        return np.array(slicez)
+
+        return slicez
+
     else:
         raise ValueError('slices() got unknown method={}'.format(method))
+
+
+def sqi_remove_ibi_outliers(slicez):
+        # pad up to maximum length (within some reasonable limits)
+        # note: when does this break? check IBI distribution, and if too skewed, there is other trouble.
+        # (e.g. median IBI does not fit this assumed distribution? -> exit with an error message)
+        lens_ok = np.array([len(s) for s in slicez])
+        print 'lens_ok', len(lens_ok)
+
+        #
+        # IBI length limiter.
+        #
+        # Filters bad interval lengths for
+        # 1) removal from the beatshape average
+        # 2) beatshape window size (maximum reasonable IBI length)
+        #
+
+        # model limit assumption:
+        # say 300 ms SDNN on a 800 ms RR -> 0.38
+        rel_dev_limit = 0.38  #: add this relative amount of tolerance to IBI limits
+        ibi_limit_perc = 0.1  #: as IBI limits, use this percentile on the IBI distribution, and add `rel_dev_limit`
+        len_min, len_max = np.median(lens_ok) * (1.0 - rel_dev_limit), np.median(lens_ok) * (1.0 + rel_dev_limit)
+        if np.sum(lens_ok < len_min) > ibi_limit_perc * len(lens_ok):
+            raise ValueError('while slicing: ibi model len_min limit assumption violated.')
+        if np.sum(lens_ok > len_max) > ibi_limit_perc * len(lens_ok):
+            raise ValueError('while slicing: ibi model len_max limit assumption violated.')
+
+        # actual model is more robust (uses boundary-percentile limits instead of median)
+        model_len_max = np.percentile(lens_ok, 100.0 * (1.0 - ibi_limit_perc)) * (1.0 + rel_dev_limit)
+        model_len_min = np.percentile(lens_ok, 100.0 * ibi_limit_perc) * (1.0 - rel_dev_limit)
+        model_len_bottom = np.percentile(lens_ok, 100.0 * ibi_limit_perc)
+        print 'model_len_bottom', model_len_bottom
+        print 'model_len_min', model_len_min, 'model_len_max', model_len_max
+        lens_ok = lens_ok[np.where(lens_ok < model_len_max)[0]]
+        print 'lens_ok', len(lens_ok)
+        lens_ok = lens_ok[np.where(lens_ok > model_len_min)[0]]
+        print 'lens_ok', len(lens_ok)
+        # Lmax = max(lens_ok)
+        # model_len_bottom: almost all waveshapes should still be present for the mean calculation.
+        Lmax = int(model_len_bottom)
+        print 'Lmax=', Lmax
+        slicez = np.array([sig_pad(s, L=Lmax) for s in slicez])
+
+        return slicez
+
+
+def sqi_remove_shape_outliers(slicez):
+    #
+    # Outlier beat shape removal.
+    #
+    # Removes outliers that would screw the average beatshape calculation later.
+
+    # limiting lower and upper beat shape envelopes
+    amplitude_limit_perc = 0.1
+    ampl_viol_limit_perc = 0.1
+    p_min, p_max = [100.0 * amplitude_limit_perc, 100.0 * (1.0 - amplitude_limit_perc)]
+    s_min, s_max = [np.percentile(slicez, p, axis=0) for p in [p_min, p_max]]
+    #self.s_min, self.s_max = s_min, s_max
+
+    # a good histogram for visualization of overall beat quality:
+    """
+    # auto adjust waveshape percentiles
+    ccs = []
+    for p in range(20):
+        p_min, p_max = p, 100-p
+        s_min, s_max = [np.percentile(slicez, p, axis=0) for p in [p_min, p_max]]
+        ccs.append(cross_corr(s_min-np.mean(s_min), s_max-np.mean(s_max)))
+
+    plt.plot(ccs)
+    plt.show()
+    """
+
+    num_violations = []
+    for sl in slicez:
+        num_violations.append(np.sum(sl < s_min) + np.sum(sl > s_max))
+    # ampl_viol_limit_perc
+    violation_threshold = np.percentile(num_violations, (100.0 * (1.0 - ampl_viol_limit_perc)))
+    # good = most of the beat is within the shape envelopes
+    igood = np.where(num_violations < violation_threshold)[0]
+
+    return slicez[igood]
 
 
 class QsqiError(RuntimeError): pass
@@ -199,7 +248,10 @@ class QsqiPPG(HeartSeries):
         return template_2
 
     def slices(self, method='direct'):
-        return sqi_slices(self, method)
+        slicez = sqi_slices(self, method)
+        step1 = sqi_remove_ibi_outliers(slicez)
+        step2 = sqi_remove_shape_outliers(step1)
+        return step2
 
     def sqi1(self):
         """direct matching (fiducial + length L template correlation)"""
