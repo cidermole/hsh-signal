@@ -41,7 +41,9 @@ class Series(object):
         return Series(xu, fps*ratio, self.lpad*ratio)
 
     def slice(self, s):
-        return HeartSeries(self.x[s], self.ibeats[s], self.fps, self.lpad)
+        want_idxs = np.arange(len(self.x))[s]
+        iib = np.where((self.ibeats >= want_idxs[0]) & (self.ibeats <= want_idxs[-1]))[0]
+        return HeartSeries(self.x[s], self.ibeats[iib] - want_idxs[0], self.fps, self.lpad)
 
     def add_beats(self, ibeats):
         return HeartSeries(self.x, ibeats, self.fps, self.lpad)
