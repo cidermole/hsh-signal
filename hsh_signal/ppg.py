@@ -1,19 +1,25 @@
 from brueser.brueser2 import brueser_beatdetect
 from .heartseries import HeartSeries
-from hsh_beatdet import beatdet_getrr_v1, beatdet_getrr_v2, beatdet
+from hsh_beatdet import beatdet_getrr_v1, beatdet_getrr_v2, beatdet_getrr_v2_fracidx, beatdet
 #from .signal import evenly_resample
 import numpy as np
+
 
 def ppg_beatdetect(ppg, debug=False):
     return ppg_beatdetect_brueser(ppg, debug)
 
-def ppg_beatdetect_getrr(ppg, debug=False):
+def ppg_beatdetect_getrr(ppg, type='fracidx', debug=False):
+    # regular | fracidx
     # XXX: getrr() fps must be 30.0 currently, there is a subtle getrr() bug otherwise
     assert np.abs(ppg.fps - 30.0) < 1e-3
     fps = ppg.fps
     data = np.vstack((ppg.t, ppg.x)).T
 
-    return beatdet(data, beatdet_getrr_v2)
+    if type == 'fracidx':
+        return beatdet(data, beatdet_getrr_v2_fracidx)
+    else:
+        return beatdet(data, beatdet_getrr_v2)
+    #ibi, filtered, idxs, tbeats = beatdet(data, beatdet_getrr_v2)
 
 def ppg_beatdetect_brueser(ppg, debug=False):
     ibeats, ibis = brueser_beatdetect(ppg.x, ppg.fps)
