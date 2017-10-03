@@ -41,9 +41,7 @@ class Series(object):
         return Series(xu, fps*ratio, self.lpad*ratio)
 
     def slice(self, s):
-        want_idxs = np.arange(len(self.x))[s]
-        iib = np.where((self.ibeats >= want_idxs[0]) & (self.ibeats <= want_idxs[-1]))[0]
-        return HeartSeries(self.x[s], self.ibeats[iib] - want_idxs[0], self.fps, self.lpad)
+        return Series(self.x[s], self.fps, self.lpad)
 
     def add_beats(self, ibeats):
         return HeartSeries(self.x, ibeats, self.fps, self.lpad)
@@ -86,6 +84,11 @@ class HeartSeries(Series):
 
     def copy(self):
         return HeartSeries(self.x, self.ibeats, self.fps, self.lpad)
+
+    def slice(self, s):
+        want_idxs = np.arange(len(self.x))[s]
+        iib = np.where((self.ibeats >= want_idxs[0]) & (self.ibeats <= want_idxs[-1]))[0]
+        return HeartSeries(self.x[s], self.ibeats[iib] - want_idxs[0], self.fps, self.lpad)
 
     def upsample(self, ratio=10):
         ratio, fps = int(ratio), self.fps
@@ -245,7 +248,7 @@ class HeartSeries(Series):
             return -20.0  # pretend bad SNR if not enough beats were found.
 
         mean_ibi = np.mean(np.diff(ibeats))
-        slicez = slices(self.x, ibeats, hwin=int(mean_ibi/2))
+        slicez = slices(self.x, ibeats.astype(int), hwin=int(mean_ibi/2))
 
         if mode == 'neighbors':
             # actually this is log(corr) and slightly different from SNR.
