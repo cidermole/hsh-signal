@@ -20,7 +20,7 @@ def ppg_wave_foot(ppg_raw_l, ppg_l):
     #
     ratio=10  # use same ratio for all!
     ppg_smoothed = ppg_l.upsample(ratio)
-    ppg_smoothed.x = lowpass(ppg_smoothed.x, ppg_smoothed.fps, cf=3.0, tw=0.5)
+    ppg_smoothed.x = lowpass(ppg_smoothed.x, ppg_smoothed.fps, cf=6.0, tw=0.5)
 
     # fill `ileft_min` with index of next local minimum to the left
     # for noise robustness, use some smoothing before
@@ -83,7 +83,7 @@ def beat_baseline(ppg_feet, ppg_beats):
     xul = np.pad(xul, (ibeats[0], len(xu) - ibeats[-1]), mode='constant')
     # to do: should we lowpass filter here, to get rid of all higher freq components?
 
-    f_cf = 0.8
+    f_cf = 1.8
     f_tw = f_cf / 2.0
     xu_filtered = lowpass(xul, ppg.fps, cf=f_cf, tw=f_tw)  # * scaling  # * ratio
 
