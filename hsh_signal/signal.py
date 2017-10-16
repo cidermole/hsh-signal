@@ -229,13 +229,12 @@ def even_smooth(ii, x, length, fps, cf=2.0, tw=1.0):
     return lowpass(ix, fps=fps, cf=cf, tw=tw)
 
 
-def seek_left_localmax(x, idxs, fps):
+def seek_left_localmax(x, idxs, fps, win_len=0.3):
     """seek to the left of SSF-detected peaks `idxs`, to find the actual feet (localmax)"""
-    LWIN_LEN = 0.25
     ifeet = []
     imax = np.where(localmax(x))[0]
     for i in idxs:
-        ii = np.where(((i - imax) >= 0) & ((i - imax) <= int(fps * LWIN_LEN)))[0]
+        ii = np.where(((i - imax) >= 0) & ((i - imax) <= int(fps * win_len)))[0]
         if len(ii) == 0: continue
         ifeet.append(imax[ii][-1])
     ifeet = np.array(ifeet)
