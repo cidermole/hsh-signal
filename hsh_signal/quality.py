@@ -101,7 +101,7 @@ def sqi_slices(sig, method='direct'):
         raise ValueError('slices() got unknown method={}'.format(method))
 
 
-def sqi_remove_ibi_outliers(slicez):
+def sqi_remove_ibi_outliers(slicez, debug_errors=False):
     slicez = np.array(slicez)
     # pad up to maximum length (within some reasonable limits)
     # note: when does this break? check IBI distribution, and if too skewed, there is other trouble.
@@ -124,8 +124,16 @@ def sqi_remove_ibi_outliers(slicez):
     ibi_limit_perc = 0.1  #: as IBI limits, use this percentile on the IBI distribution, and add `rel_dev_limit`
     len_min, len_max = np.median(lens_ok) * (1.0 - rel_dev_limit), np.median(lens_ok) * (1.0 + rel_dev_limit)
     if np.sum(lens_ok < len_min) > ibi_limit_perc * len(lens_ok):
+        if debug_errors:
+            print 'lens_ok=',lens_ok
+            print 'len_min=', len_min, 'len_max=', len_max
+            print np.sum(lens_ok < len_min), 'ibis below len_min is too much, max.', int(ibi_limit_perc * len(lens_ok))
         raise ValueError('while slicing: ibi model len_min limit assumption violated.')
     if np.sum(lens_ok > len_max) > ibi_limit_perc * len(lens_ok):
+        if debug_errors:
+            print 'lens_ok=',lens_ok
+            print 'len_min=', len_min, 'len_max=', len_max
+            print np.sum(lens_ok > len_max), 'ibis above len_max is too much, max.', int(ibi_limit_perc * len(lens_ok))
         raise ValueError('while slicing: ibi model len_max limit assumption violated.')
 
     # actual model is more robust (uses boundary-percentile limits instead of median)
@@ -149,7 +157,7 @@ def sqi_remove_ibi_outliers(slicez):
     return slicez, ibeat_ok
 
 
-def sqi_remove_shape_outliers(slicez):
+def sqi_remove_shape_outliers(slicez, debug_errors=False):
     #
     # Outlier beat shape removal.
     #
@@ -204,6 +212,7 @@ class QsqiPPG(HeartSeries):
 
     def __init__(self, *args, **kwargs):
         init_template = kwargs.pop('init_template', True)
+        self.debug_errors = kwargs.pop('debug_errors', False)
         super(QsqiPPG, self).__init__(*args, **kwargs)
         if init_template:
             self.init_template()
@@ -215,12 +224,12 @@ class QsqiPPG(HeartSeries):
         self.template_skewness = skewness(self.template)
 
     @staticmethod
-    def from_heart_series(hs, init_template=True):
+    def from_heart_series(hs, init_template=True, debug_errors=False):
         """
         caution! input must be one-sided, i.e. must NOT be DC free.
         (otherwise, correlation will fail to provide high enough values for CC_THR)
         """
-        return QsqiPPG(hs.x, hs.ibeats, fps=hs.fps, lpad=hs.lpad, init_template=init_template)
+        return QsqiPPG(hs.x, hs.ibeats, fps=hs.fps, lpad=hs.lpad, init_template=init_template, debug_errors=debug_errors)
 
     @staticmethod
     def from_series_data(signal, idx, fps=30, lpad=0, init_template=True):
@@ -259,9 +268,9 @@ class QsqiPPG(HeartSeries):
         slicez = sqi_slices(self, method)
         igood = np.arange(len(slicez))
 
-        step1, good1 = sqi_remove_ibi_outliers(slicez)
+        step1, good1 = sqi_remove_ibi_outliers(slicez, debug_errors=self.debug_errors)
         igood = igood[good1]
-        step2, good2 = sqi_remove_shape_outliers(step1)
+        step2, good2 = sqi_remove_shape_outliers(step1, debug_errors=self.debug_errors)
         igood = igood[good2]
         assert len(step2) == len(igood)
 
