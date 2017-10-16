@@ -2,6 +2,8 @@ from __future__ import division
 
 import numpy as np
 from scipy import interpolate
+from scipy import signal
+from scipy.interpolate import interp1d
 
 
 def bpm2hz(f_bpm):
@@ -182,3 +184,59 @@ def win_max(sig, hwin):
         s,e = max(i-hwin, 0), min(i+hwin+1, len(sig))
         out[i] = np.max(sig[s:e])
     return out
+
+
+def cwt_lowpass(x, fps, cf):
+    num_wavelets = int(fps / cf)
+    widths = np.arange(1, num_wavelets)
+    cwt_mat = signal.cwt(x, signal.ricker, widths)
+    c = np.mean(cwt_mat, axis=0)
+    # renormalize
+    orig_e, c_e = np.sqrt(np.sum(x*x)), np.sqrt(np.sum(c*c))
+    return c * (orig_e / c_e)
+
+
+def even_smooth(ii, x, length, fps, cf=2.0, tw=1.0):
+    """
+    Turn an intermittently sampled signal into an evenly sampled one of `length`.
+    Similar to `evenly_resample()` except this is index-based and smoothes afterwards.
+
+    :param ii   indices for the samples in `x` (may be fractional)
+    :param x    values sampled at uneven indices `ii`
+    :param fps  sampling rate
+    :param cf   cutoff frequency for subsequent low-pass filter
+    :param tw   transition width for subsequent low-pass filter
+    """
+    # add bounds (constant value approximation)
+    assert len(x) > 0
+    ii = np.insert(ii, 0, -1)
+    ii = np.insert(ii, len(ii), length)
+    # + 1e-3 * std ... avoid interpolate division by zero?
+    # x = np.insert(x, 0, x[0] + 1e-3 * np.std(x))
+    # x = np.insert(x, len(x), x[-1] + 1e-3 * np.std(x))
+    x = np.insert(x, 0, x[0])
+    x = np.insert(x, len(x), x[-1])
+
+    #print 'insert x[0]=', x[0], 'x[-1]=', x[-1]
+
+    # interpolate it -> evenly sampled
+    func = interp1d(ii, x, kind='linear')
+    ix = func(np.arange(length))
+
+    #print 'resulting ix[0]=', ix[0], 'ix[1]=', ix[1], 'ix[-1]=', ix[-1]
+
+    # smooth it
+    return lowpass(ix, fps=fps, cf=cf, tw=tw)
+
+
+def seek_left_localmax(x, idxs, fps):
+    """seek to the left of SSF-detected peaks `idxs`, to find the actual feet (localmax)"""
+    LWIN_LEN = 0.15
+    ifeet = []
+    imax = np.where(localmax(x))[0]
+    for i in idxs:
+        ii = np.where(((i - imax) > 0) & ((i - imax) < int(fps * LWIN_LEN)))[0]
+        if len(ii) == 0: continue
+        ifeet.append(imax[ii][-1])
+    ifeet = np.array(ifeet)
+    return ifeet
