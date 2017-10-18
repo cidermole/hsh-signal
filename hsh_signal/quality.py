@@ -131,7 +131,7 @@ def sqi_remove_ibi_outliers(slicez, debug_errors=False, keep_all=False):
     len_max = np.percentile(lens_ok, 100.0 * (1.0 - ibi_limit_perc)) * (1.0 + rel_dev_limit)
     len_min = np.percentile(lens_ok, 100.0 * ibi_limit_perc) * (1.0 - rel_dev_limit)
 
-    print 'len_min=', len_min, 'len_max=', len_max
+    #print 'len_min=', len_min, 'len_max=', len_max
     if np.sum(lens_ok < len_min) > ibi_limit_perc * len(lens_ok):
         if debug_errors:
             print 'lens_ok=',lens_ok
@@ -224,14 +224,20 @@ def sqi_remove_shape_outliers(slicez, debug_errors=False, get_envelopes=False):
     """
 
     # most value is given to deviations at the start, while deviations towards the end are discounted
-    weighting = gauss(np.arange(len(s_min)), 0, len(s_min)*0.5)
+    weighting = gauss(np.arange(len(s_min)), len(s_min)*SLICE_FRONT, len(s_min)*0.5)
+    weighting[:int(len(s_min)*SLICE_FRONT)+1] = 0.0  # blank weighting the previous beat
     weighting = weighting / np.sum(weighting)  # * len(s_min)
 
     num_violations = []
     for sl in slicez_norm:
-        num_violations.append(np.sum((sl < s_min) * weighting) + np.sum((sl > s_max) * weighting))
-    # note: this is not very principled! (adaptively kills 10% of worst beats... but what if there are more?)
+        # deviations are penalized with the MSE error from boundaries
+        num_violations.append(np.sqrt(np.sum((sl < s_min) * (s_min - sl)**2 * weighting) + np.sum((sl > s_max) * (sl - s_max)**2 * weighting)))
+    # TODO: this is not very principled! (always kills 10% of worst beats... but what if there are more?)
+    # (we should instead remove ones where a lot of strong violation happens. not 10th percentile though)
+    # TODO: how to define those bounds, then?
     violation_threshold = np.percentile(num_violations, (100.0 * (1.0 - ampl_viol_limit_perc)))
+    #violation_threshold = 1.0  # TODO: why does this kill template_2???
+    #print 'violation_threshold=', violation_threshold
     # good = most of the beat is within the shape envelopes
     igood = np.where(num_violations < violation_threshold)[0]
 
@@ -239,7 +245,7 @@ def sqi_remove_shape_outliers(slicez, debug_errors=False, get_envelopes=False):
     #print 'remove_shape_outliers ibad=', ibad
 
     if get_envelopes:
-        return slicez[igood], igood, s_min, s_max
+        return slicez[igood], igood, s_min, s_max, num_violations, violation_threshold
     else:
         return slicez[igood], igood
 
@@ -260,6 +266,13 @@ class QsqiError(RuntimeError): pass
 class QsqiPPG(HeartSeries):
     """
     qSQI signal quality indicator.
+
+    NOTE: code assumes that beats are timed on the feet of the beats.
+    For example, windows are placed and weighted carefully in `sqi_remove_shape_outliers()`
+
+    The shape of distributions of `num_violations` and `corrs` give an indication of overall measurement quality.
+
+    inspired by:
 
     Li, Q., and G. D. Clifford. "Dynamic time warping and machine learning for signal quality assessment of pulsatile signals." Physiological measurement 33.9 (2012): 1491.
     http://www.robots.ox.ac.uk/~gari/papers/Li_and_Clifford_2012_IOP_Phys_Meas.pdf
@@ -341,7 +354,8 @@ class QsqiPPG(HeartSeries):
             step1, good1 = sqi_remove_ibi_outliers(slicez, debug_errors=self.debug_errors)
             self.ibad1 = np.array(sorted(list(set(ig_orig) - set(good1))))
             igood = igood[good1]
-            step2, good2, self.s_min, self.s_max = sqi_remove_shape_outliers(step1, debug_errors=self.debug_errors, get_envelopes=True)
+            self.igood1 = np.array(igood)
+            step2, good2, self.s_min, self.s_max, self.num_violations, self.violation_threshold = sqi_remove_shape_outliers(step1, debug_errors=self.debug_errors, get_envelopes=True)
             self.ibad2 = np.array(sorted(list(set(igood) - set(good2))))
             igood = igood[good2]
             assert len(step2) == len(igood)
@@ -432,9 +446,23 @@ class QsqiPPG(HeartSeries):
             is_good = (self.corrs[ii] > QsqiPPG.CC_THR) and i in self.ibis_good
             plotter.text(self.tbeats[i], ym + bl, fmt(self.corrs[ii]), color='g' if is_good else 'r')
 
+        for ii, i in enumerate(self.igood1):
+            # for ii, i in enumerate(np.arange(len(ppgz.ibeats) - 1)):
+            bl = np.percentile(self.x, 90) * 0.3
+            ym = 0 if ii % 2 == 0 else bl
+            is_good = (self.num_violations[ii] < self.violation_threshold)
+            plotter.text(self.tbeats[i], ym - 5*bl, '%.2f'%(self.num_violations[ii]), color='gray' if is_good else 'm')
+
         #plotter.plot(self.t, self.env_min, c='g')
         #plotter.plot(self.t, self.env_max, c='r')
         plotter.fill_between(self.t, self.env_min, self.env_max, facecolor='lightgray')
+
+        x_good = self.x[np.where(self.t > (self.lock_time if self.lock_time is not None else 5.0))[0]]
+        swing = np.max(np.abs([np.percentile(x_good, 5), np.percentile(x_good, 95)])) * 2.5
+        if hasattr(plotter, 'set_ylim'):
+            plotter.set_ylim([-swing, swing*0.1])
+        else:
+            plotter.ylim([-swing, swing*0.1])
         super(QsqiPPG, self).plot(plotter=plotter, dt=dt, **kwargs)
 
 class BeatQuality(QsqiPPG):
