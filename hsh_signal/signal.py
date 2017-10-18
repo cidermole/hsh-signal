@@ -236,6 +236,25 @@ def seek_left_localmax(x, idxs, fps, win_len=0.3):
     for i in idxs:
         ii = np.where(((i - imax) >= 0) & ((i - imax) <= int(fps * win_len)))[0]
         if len(ii) == 0: continue
+        # find the first localmax on the left (not necessarily the tallest)
         ifeet.append(imax[ii][-1])
     ifeet = np.array(ifeet)
     return ifeet
+
+
+def localmax_interp(x, idxs, hwin_size=None):
+    """
+    Turn local maxima from integers to floats.
+    :param x     signal
+    :param idxs  integer indices of local maxima
+    :param hwin_size  optional integer window size. if given, do a localmax_climb() before to find the exact maxima so the result will be correct with rough estimates.
+    :returns float indices into `x`
+    """
+    idxs = localmax_climb(x, idxs, hwin_size) if hwin_size is not None else idxs
+    der = np.pad(np.diff(x), (1, 1), 'constant')
+    new_idxs = []
+    for i in idxs:
+        xp, fp = der[i:i+2], np.array([i,i+1])
+        ii = interp1d(xp, fp, bounds_error=False, fill_value=i)([0])
+        new_idxs.append(max(min(ii, i+1), i))
+    return np.array(new_idxs)
