@@ -101,14 +101,14 @@ def sqi_slices(sig, method='direct'):
         raise ValueError('slices() got unknown method={}'.format(method))
 
 
-def sqi_remove_ibi_outliers(slicez, debug_errors=False):
+def sqi_remove_ibi_outliers(slicez, debug_errors=False, keep_all=False):
     slicez = np.array(slicez)
     # pad up to maximum length (within some reasonable limits)
     # note: when does this break? check IBI distribution, and if too skewed, there is other trouble.
     # (e.g. median IBI does not fit this assumed distribution? -> exit with an error message)
     lens_ok = np.array([len(s) for s in slicez])
     ibeat_ok = np.arange(len(slicez))
-    print 'lens_ok', len(lens_ok)
+    #print 'lens_ok', len(lens_ok)
 
     #
     # IBI length limiter.
@@ -122,7 +122,13 @@ def sqi_remove_ibi_outliers(slicez, debug_errors=False):
     # say 300 ms SDNN on a 800 ms RR -> 0.38
     rel_dev_limit = 0.38  #: add this relative amount of tolerance to IBI limits
     ibi_limit_perc = 0.1  #: as IBI limits, use this percentile on the IBI distribution, and add `rel_dev_limit`
-    len_min, len_max = np.median(lens_ok) * (1.0 - rel_dev_limit), np.median(lens_ok) * (1.0 + rel_dev_limit)
+    #len_min, len_max = np.median(lens_ok) * (1.0 - rel_dev_limit), np.median(lens_ok) * (1.0 + rel_dev_limit)
+
+    # boundary-percentile limits
+    len_max = np.percentile(lens_ok, 100.0 * (1.0 - ibi_limit_perc)) * (1.0 + rel_dev_limit)
+    len_min = np.percentile(lens_ok, 100.0 * ibi_limit_perc) * (1.0 - rel_dev_limit)
+
+    #print 'len_min=', len_min, 'len_max=', len_max
     if np.sum(lens_ok < len_min) > ibi_limit_perc * len(lens_ok):
         if debug_errors:
             print 'lens_ok=',lens_ok
@@ -136,22 +142,22 @@ def sqi_remove_ibi_outliers(slicez, debug_errors=False):
             print np.sum(lens_ok > len_max), 'ibis above len_max is too much, max.', int(ibi_limit_perc * len(lens_ok))
         raise ValueError('while slicing: ibi model len_max limit assumption violated.')
 
-    # actual model is more robust (uses boundary-percentile limits instead of median)
     model_len_max = np.percentile(lens_ok, 100.0 * (1.0 - ibi_limit_perc)) * (1.0 + rel_dev_limit)
     model_len_min = np.percentile(lens_ok, 100.0 * ibi_limit_perc) * (1.0 - rel_dev_limit)
     model_len_bottom = np.percentile(lens_ok, 100.0 * ibi_limit_perc)
-    print 'model_len_bottom', model_len_bottom
-    print 'model_len_min', model_len_min, 'model_len_max', model_len_max
+    #print 'model_len_bottom', model_len_bottom
+    #print 'model_len_min', model_len_min, 'model_len_max', model_len_max
     max_filter = np.where(lens_ok < model_len_max)[0]
     lens_ok, ibeat_ok = lens_ok[max_filter], ibeat_ok[max_filter]
-    print 'lens_ok', len(lens_ok)
+    #print 'lens_ok', len(lens_ok)
     min_filter = np.where(lens_ok > model_len_min)[0]
     lens_ok, ibeat_ok = lens_ok[min_filter], ibeat_ok[min_filter]
-    print 'lens_ok', len(lens_ok)
+    #print 'lens_ok', len(lens_ok)
     # Lmax = max(lens_ok)
     # model_len_bottom: almost all waveshapes should still be present for the mean calculation.
     Lmax = int(model_len_bottom)
-    print 'Lmax=', Lmax
+    #print 'Lmax=', Lmax
+    if keep_all: ibeat_ok = np.arange(len(slicez))
     slicez = np.array([sig_pad(s, L=Lmax) for s in slicez[ibeat_ok]])
 
     return slicez, ibeat_ok
@@ -192,7 +198,7 @@ def sqi_remove_shape_outliers(slicez, debug_errors=False):
     igood = np.where(num_violations < violation_threshold)[0]
 
     ibad = np.array(sorted(list(set(np.arange(len(slicez))) - set(igood))))
-    print 'remove_shape_outliers ibad=', ibad
+    #print 'remove_shape_outliers ibad=', ibad
 
     return slicez[igood], igood
 
