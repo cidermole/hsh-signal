@@ -249,6 +249,37 @@ class LazyDict(dict):
         return super(LazyDict, self).__getitem__(key)
 
 
+class ResearchUser:
+    def __init__(self, ad):
+        #self.ad = ad
+        self.model, self.app_id, self.age, self.gender = ad.model(), ad.app_id(), ad.age(), ad.gender()
+
+    def is_david(self):
+        is_model = (self.model in ['Nexus 5X'])
+        is_age = self.age and (self.age >= 25 and self.age <= 26)
+        return is_model and is_age
+
+
+# for m in ms:
+#     mf = os.path.basename(m.meta_filename)
+#     st = m.meta_data['start_time']
+#     t_from, t_to = datetime(2017,6,1), datetime(2017,6,7)
+#     is_prolific_timespan = (st >= t_from and st < t_to)
+#
+#     may_david = (m.model() == 'Nexus 5X' and m.age() == 25)
+#     may_tom1 = (m.model() == 'NEM-L51' and (m.age() == 28 or m.age() == '28'))
+#     may_tom2 = (m.app_id() == '2A63ADA2' or m.app_id() == '93EC648F')
+#     may_tom = may_tom1 or may_tom2
+#     if is_prolific_timespan and may_david: nums['david'] += 1
+#     elif is_prolific_timespan and may_tom: nums['tom'] += 1
+#     elif is_prolific_timespan: nums['other'] += 1
+#
+#     is_prolific = is_prolific_timespan and not (may_david or may_tom)
+#
+#     if is_prolific:
+#         prolific_measurements.append(m)
+
+
 class AppData:
     """source agnostic loader, handles data from phones and server."""
     CACHE_DIR = '.cache-nosync'
@@ -674,6 +705,9 @@ class AppData:
 
     def gender(self):
         return self._age_or_gender('gender')
+
+    def user(self):
+        return ResearchUser(self)
 
     def get_cvd_status(self):
         if not self.has_diagnosis():
