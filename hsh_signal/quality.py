@@ -128,7 +128,7 @@ def sqi_remove_ibi_outliers(slicez, debug_errors=False, keep_all=False):
     len_max = np.percentile(lens_ok, 100.0 * (1.0 - ibi_limit_perc)) * (1.0 + rel_dev_limit)
     len_min = np.percentile(lens_ok, 100.0 * ibi_limit_perc) * (1.0 - rel_dev_limit)
 
-    #print 'len_min=', len_min, 'len_max=', len_max
+    print 'len_min=', len_min, 'len_max=', len_max
     if np.sum(lens_ok < len_min) > ibi_limit_perc * len(lens_ok):
         if debug_errors:
             print 'lens_ok=',lens_ok
@@ -219,6 +219,7 @@ class QsqiPPG(HeartSeries):
     def __init__(self, *args, **kwargs):
         init_template = kwargs.pop('init_template', True)
         self.debug_errors = kwargs.pop('debug_errors', False)
+        self.lock_time = kwargs.pop('lock_time', None)
         super(QsqiPPG, self).__init__(*args, **kwargs)
         if init_template:
             self.init_template()
@@ -230,12 +231,12 @@ class QsqiPPG(HeartSeries):
         self.template_skewness = skewness(self.template)
 
     @staticmethod
-    def from_heart_series(hs, init_template=True, debug_errors=False):
+    def from_heart_series(hs, init_template=True, lock_time=None, debug_errors=False):
         """
         caution! input must be one-sided, i.e. must NOT be DC free.
         (otherwise, correlation will fail to provide high enough values for CC_THR)
         """
-        return QsqiPPG(hs.x, hs.ibeats, fps=hs.fps, lpad=hs.lpad, init_template=init_template, debug_errors=debug_errors)
+        return QsqiPPG(hs.x, hs.ibeats, fps=hs.fps, lpad=hs.lpad, init_template=init_template, lock_time=lock_time, debug_errors=debug_errors)
 
     @staticmethod
     def from_series_data(signal, idx, fps=30, lpad=0, init_template=True):
@@ -247,11 +248,15 @@ class QsqiPPG(HeartSeries):
 
     def beat_template_1(self):
         self.L = np.median(np.diff(self.tbeats))
-        slicez = self.slices(method="fixed") #, hwin=int(self.L*self.fps/2.)))
-        template_1 = np.mean(slicez, axis=0)
+        slicez_1, islicez_1 = self.slices(method="fixed") #, hwin=int(self.L*self.fps/2.)))
+        self.ibis_good = islicez_1
+        template_1 = np.mean(slicez_1, axis=0)
         #print 'template_1', template_1
+        slicez, islicez = self.slices(method="fixed", scrub=False)
         corrs = np.array([cross_corr(sl, template_1) for sl in slicez])
-        self.slicez, self.template_1, self.corrs = slicez, template_1, corrs
+        self.slicez_1, self.islicez_1, self.template_1 = slicez_1, islicez_1, template_1
+        self.slicez, self.islicez, self.corrs = slicez, islicez, corrs
+        # TODO: penalize the correlation of overlong IBIs (since correlation only goes until the beat template ends)
 
     def beat_template_2(self):
         slicez, template_1, corrs = self.slicez, self.template_1, self.corrs
@@ -270,15 +275,22 @@ class QsqiPPG(HeartSeries):
 
         return template_2
 
-    def slices(self, method='direct'):
-        slicez = sqi_slices(self, method)
-        igood = np.arange(len(slicez))
+    def slices(self, method='direct', scrub=True):
+        si = np.where(self.tbeats > self.lock_time)[0][0] if self.lock_time is not None else 0
+        slicez = sqi_slices(self, method)[si:]
+        igood = np.arange(si, len(slicez)+si) # attention: len(slicez) is shorter if we use [si:] above
 
-        step1, good1 = sqi_remove_ibi_outliers(slicez, debug_errors=self.debug_errors)
-        igood = igood[good1]
-        step2, good2 = sqi_remove_shape_outliers(step1, debug_errors=self.debug_errors)
-        igood = igood[good2]
-        assert len(step2) == len(igood)
+        if scrub:
+            step1, good1 = sqi_remove_ibi_outliers(slicez, debug_errors=self.debug_errors)
+            igood = igood[good1]
+            step2, good2 = sqi_remove_shape_outliers(step1, debug_errors=self.debug_errors)
+            igood = igood[good2]
+            assert len(step2) == len(igood)
+        else:
+            step2, good1 = sqi_remove_ibi_outliers(slicez, debug_errors=self.debug_errors, keep_all=True)
+            igood = igood[good1]
+            #step2 = np.array(slicez)
+            #igood = np.arange(len(slicez))
 
         # for debugging: mark which areas have been scrubbed
         sig_good = np.ones(len(self.x))
@@ -289,21 +301,21 @@ class QsqiPPG(HeartSeries):
                 sig_good[s:e] *= 0
 
         self.sig_good = sig_good
-        self.ibis_good = igood
+        #self.ibis_good = igood
 
-        return step2
+        return step2, igood
 
     def sqi1(self):
         """direct matching (fiducial + length L template correlation)"""
         # nb. slight difference: we are centering the window on the beat, while Li et al
-        slicez = self.slices(method='fixed')
+        slicez, islicez = self.slices(method='fixed')
         corrs = np.array([cross_corr(sl, self.template) if len(sl) else 0.0 for sl in slicez])
         corrs = np.clip(corrs, a_min=0.0, a_max=1.0)
         return corrs
 
     def sqi2(self):
         """linear resampling (between two fiducials up to length L, correlation)"""
-        slicez = self.slices(method='variable')
+        slicez, islicez = self.slices(method='variable')
         L = len(self.template)
         corrs = np.array([(cross_corr(sig_resample(sl, L), self.template) if len(sl) else 0.0) for sl in slicez])
         corrs = np.clip(corrs, a_min=0.0, a_max=1.0)
@@ -319,22 +331,22 @@ class QsqiPPG(HeartSeries):
 
     def sqi3(self):
         """DTW resampling (resampling to length L and correlation)"""
-        slicez = self.slices(method='variable')
+        slicez, islicez = self.slices(method='variable')
         corrs = np.array([cross_corr(*self.dtw_resample(sl)) if len(sl) else 0.0 for sl in slicez])
         corrs = np.clip(corrs, a_min=0.0, a_max=1.0)
         return corrs
 
     def kurtosis(self):
         # unclear if 'fixed' or 'variable' is any better, could not just eyeball.
-        slicez = self.slices(method='fixed')
+        slicez, islicez = self.slices(method='fixed')
         return np.array([kurtosis(sl) if len(sl) else 0.0 for sl in slicez])
 
     def skewness(self):
-        slicez = self.slices(method='fixed')
+        slicez, islicez = self.slices(method='fixed')
         return np.array([skewness(sl) if len(sl) else 0.0 for sl in slicez])
 
     def spearman(self):
-        slicez = self.slices(method='variable')
+        slicez, islicez = self.slices(method='variable')
         #corrs = np.array([spearmanr(*self.dtw_resample(sl))[0] if len(sl) else 0.0 for sl in slicez])
         corrs = np.nan_to_num([spearmanr(*self.dtw_resample(sl))[0] if len(sl) else 0.0 for sl in slicez])
         corrs = np.clip(corrs, a_min=0.0, a_max=1.0)
