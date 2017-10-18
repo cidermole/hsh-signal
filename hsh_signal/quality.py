@@ -163,17 +163,30 @@ def sqi_remove_ibi_outliers(slicez, debug_errors=False, keep_all=False):
     return slicez, ibeat_ok
 
 
+def sqi_normalize_slices(slicez):
+    slicez_norm = []
+    for sl in slicez:
+        e = np.sqrt(np.sum(np.abs(sl)**2)) / len(sl)
+        slicez_norm.append(sl / e)
+    return np.array(slicez_norm)
+
+
 def sqi_remove_shape_outliers(slicez, debug_errors=False):
     #
     # Outlier beat shape removal.
     #
     # Removes outliers that would screw the average beatshape calculation later.
 
+    # sometimes, beat swing amplitude changes a lot during a single minute (see e.g. 1500096525_***REMOVED***_meta.b)
+    # avoid large beats being detected as outliers.
+    slicez_norm = sqi_normalize_slices(slicez)
+    #slicez_norm = np.array(slicez)
+
     # limiting lower and upper beat shape envelopes
     amplitude_limit_perc = 0.1
     ampl_viol_limit_perc = 0.1
     p_min, p_max = [100.0 * amplitude_limit_perc, 100.0 * (1.0 - amplitude_limit_perc)]
-    s_min, s_max = [np.percentile(slicez, p, axis=0) for p in [p_min, p_max]]
+    s_min, s_max = [np.percentile(slicez_norm, p, axis=0) for p in [p_min, p_max]]
     #self.s_min, self.s_max = s_min, s_max
 
     # a good histogram for visualization of overall beat quality:
@@ -188,9 +201,15 @@ def sqi_remove_shape_outliers(slicez, debug_errors=False):
     plt.plot(ccs)
     plt.show()
     """
+    """
+    import matplotlib.pyplot as plt
+    plt.plot(s_min)
+    plt.plot(s_max)
+    plt.show()
+    """
 
     num_violations = []
-    for sl in slicez:
+    for sl in slicez_norm:
         num_violations.append(np.sum(sl < s_min) + np.sum(sl > s_max))
     # ampl_viol_limit_perc
     violation_threshold = np.percentile(num_violations, (100.0 * (1.0 - ampl_viol_limit_perc)))
