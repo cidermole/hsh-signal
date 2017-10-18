@@ -283,9 +283,10 @@ class QsqiPPG(HeartSeries):
         # for debugging: mark which areas have been scrubbed
         sig_good = np.ones(len(self.x))
         ibad = np.array(sorted(list(set(np.arange(len(slicez))) - set(igood))))
-        for s, e in np.array(pairwise(self.ibeats))[ibad]:
-            s, e = max(int(s), 0), min(int(e), len(self.x))
-            sig_good[s:e] *= 0
+        if len(ibad):
+            for s, e in np.array(pairwise(self.ibeats))[ibad]:
+                s, e = max(int(s), 0), min(int(e), len(self.x))
+                sig_good[s:e] *= 0
 
         self.sig_good = sig_good
         self.ibis_good = igood
