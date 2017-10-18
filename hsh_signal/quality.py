@@ -224,8 +224,8 @@ def sqi_remove_shape_outliers(slicez, debug_errors=False, get_envelopes=False):
     """
 
     # most value is given to deviations at the start, while deviations towards the end are discounted
-    weighting = gauss(np.arange(len(s_min)), len(s_min)*SLICE_FRONT, len(s_min)*0.5)
-    weighting[:int(len(s_min)*SLICE_FRONT)+1] = 0.0  # blank weighting the previous beat
+    weighting = gauss(np.arange(len(s_min)), len(s_min)*SLICE_FRONT, len(s_min)*0.4)
+    weighting[:int(len(s_min)*SLICE_FRONT)] = 0.0  # blank weighting the previous beat
     weighting = weighting / np.sum(weighting)  # * len(s_min)
 
     num_violations = []
@@ -330,7 +330,8 @@ class QsqiPPG(HeartSeries):
     def beat_template_2(self):
         slicez, template_1, corrs = self.slicez, self.template_1, self.corrs
         #print 'corrs', corrs
-        good_corrs = np.where(corrs > QsqiPPG.CC_THR)[0]
+        #good_corrs = np.where(corrs > QsqiPPG.CC_THR)[0]
+        good_corrs = [i for i, c in enumerate(corrs) if (c > QsqiPPG.CC_THR and i in self.ibis_good)]
         if len(good_corrs) < QsqiPPG.BEAT_THR * len(corrs):
             raise QsqiError('template 2 would keep only {} good beats of {} detected'.format(len(good_corrs), len(corrs)))
         template_2 = np.mean(slicez[good_corrs], axis=0)

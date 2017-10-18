@@ -43,3 +43,23 @@ sq = QsqiPPG.from_heart_series(ppgz)
 
 sq.plot()
 plt.show()
+
+
+
+def gauss(x, t_mu, t_sigma):
+    a = 1.0 / (t_sigma * np.sqrt(2 * np.pi))
+    y = a * np.exp(-0.5 * (x - t_mu)**2 / t_sigma**2)
+    return y
+
+
+s_min = sq.template
+from hsh_signal.quality import SLICE_FRONT
+
+weighting = gauss(np.arange(len(s_min)), len(s_min)*SLICE_FRONT, len(s_min)*0.4)
+weighting[:int(len(s_min)*SLICE_FRONT)] = 0.0  # blank weighting the previous beat
+weighting = weighting / np.sum(weighting)  # * len(s_min)
+
+
+plt.plot(sq.template)
+plt.plot(-weighting*10)
+plt.show()
