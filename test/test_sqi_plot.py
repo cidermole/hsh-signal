@@ -46,20 +46,31 @@ plt.show()
 
 
 
-def gauss(x, t_mu, t_sigma):
-    a = 1.0 / (t_sigma * np.sqrt(2 * np.pi))
-    y = a * np.exp(-0.5 * (x - t_mu)**2 / t_sigma**2)
-    return y
+if False:
+    def gauss(x, t_mu, t_sigma):
+        a = 1.0 / (t_sigma * np.sqrt(2 * np.pi))
+        y = a * np.exp(-0.5 * (x - t_mu)**2 / t_sigma**2)
+        return y
 
 
-s_min = sq.template
-from hsh_signal.quality import SLICE_FRONT
+    s_min = sq.template
+    from hsh_signal.quality import SLICE_FRONT
 
-weighting = gauss(np.arange(len(s_min)), len(s_min)*SLICE_FRONT, len(s_min)*0.4)
-weighting[:int(len(s_min)*SLICE_FRONT)] = 0.0  # blank weighting the previous beat
-weighting = weighting / np.sum(weighting)  # * len(s_min)
+    weighting = gauss(np.arange(len(s_min)), len(s_min)*SLICE_FRONT, len(s_min)*0.4)
+    weighting[:int(len(s_min)*SLICE_FRONT)] = 0.0  # blank weighting the previous beat
+    weighting = weighting / np.sum(weighting)  # * len(s_min)
+
+    t1 = np.arange(len(sq.template)) / sq.fps
+    plt.plot(t1, sq.template)
+    plt.plot(t1, -weighting*10)
+    plt.show()
 
 
-plt.plot(sq.template)
-plt.plot(-weighting*10)
+t1 = np.arange(len(sq.template))/sq.fps
+plt.plot(t1, sq.template)
+#plt.show()
+
+squ = QsqiPPG.from_heart_series(ppgz.upsample(10))
+tu = np.arange(len(squ.template))/squ.fps
+plt.plot(tu-0.02, squ.template)
 plt.show()
