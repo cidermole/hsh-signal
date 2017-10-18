@@ -48,6 +48,9 @@ def sig_pad(sig, L):
     return np.pad(sig, (0, L - len(sig)), mode='edge')
 
 
+SLICE_FRONT = 0.2
+
+
 def sqi_slices(sig, method='direct'):
     if method == 'fixed':
         slicez = []
@@ -57,7 +60,7 @@ def sqi_slices(sig, method='direct'):
             l = e - s
             assert l > 0, "ibeats must be strictly ascending"
             # s,e = max(s-l*0.1, 0), max(min(e-l*0.1, len(sig.x)), 0)
-            s, e = max(s - l * 0.2, 0), max(min(e, len(sig.x)), 0)
+            s, e = max(s - l * SLICE_FRONT, 0), max(min(e, len(sig.x)), 0)
 
             if s != e:
                 # plt.plot(sig.x[s:e])
@@ -163,15 +166,27 @@ def sqi_remove_ibi_outliers(slicez, debug_errors=False, keep_all=False):
     return slicez, ibeat_ok
 
 
+def sqi_slice_norm(sl):
+    return np.sqrt(np.sum(np.abs(sl) ** 2)) / len(sl)
+
+
 def sqi_normalize_slices(slicez):
     slicez_norm = []
     for sl in slicez:
-        e = np.sqrt(np.sum(np.abs(sl)**2)) / len(sl)
+        #e = np.sqrt(np.sum(np.abs(sl)**2)) / len(sl)  # L2 norm is too heavy on fat-reflections?
+        #e = np.sqrt(np.sum(np.abs(sl))) / len(sl)  # L1 norm
+        e = sqi_slice_norm(sl)
         slicez_norm.append(sl / e)
     return np.array(slicez_norm)
 
 
-def sqi_remove_shape_outliers(slicez, debug_errors=False):
+def gauss(x, t_mu, t_sigma):
+    a = 1.0 / (t_sigma * np.sqrt(2 * np.pi))
+    y = a * np.exp(-0.5 * (x - t_mu)**2 / t_sigma**2)
+    return y
+
+
+def sqi_remove_shape_outliers(slicez, debug_errors=False, get_envelopes=False):
     #
     # Outlier beat shape removal.
     #
@@ -208,10 +223,14 @@ def sqi_remove_shape_outliers(slicez, debug_errors=False):
     plt.show()
     """
 
+    # most value is given to deviations at the start, while deviations towards the end are discounted
+    weighting = gauss(np.arange(len(s_min)), 0, len(s_min)*0.5)
+    weighting = weighting / np.sum(weighting)  # * len(s_min)
+
     num_violations = []
     for sl in slicez_norm:
-        num_violations.append(np.sum(sl < s_min) + np.sum(sl > s_max))
-    # ampl_viol_limit_perc
+        num_violations.append(np.sum((sl < s_min) * weighting) + np.sum((sl > s_max) * weighting))
+    # note: this is not very principled! (adaptively kills 10% of worst beats... but what if there are more?)
     violation_threshold = np.percentile(num_violations, (100.0 * (1.0 - ampl_viol_limit_perc)))
     # good = most of the beat is within the shape envelopes
     igood = np.where(num_violations < violation_threshold)[0]
@@ -219,10 +238,24 @@ def sqi_remove_shape_outliers(slicez, debug_errors=False):
     ibad = np.array(sorted(list(set(np.arange(len(slicez))) - set(igood))))
     #print 'remove_shape_outliers ibad=', ibad
 
-    return slicez[igood], igood
+    if get_envelopes:
+        return slicez[igood], igood, s_min, s_max
+    else:
+        return slicez[igood], igood
+
+
+def sqi_copy_to_idxs(shape, length, idxs, amplitudes):
+    d = np.zeros(length)
+    # sqi_slices() gets from -SLICE_FRONT onwards
+    idxs = np.array(idxs) + int(len(shape) * (0.5 - SLICE_FRONT)) + 1
+    shape[:int(len(shape) * 0.2)] = 0.0  # clear that swing
+    idxs = idxs[np.where(idxs < length)[0]]
+    d[idxs] = amplitudes
+    return np.convolve(d, shape, mode='same')
 
 
 class QsqiError(RuntimeError): pass
+
 
 class QsqiPPG(HeartSeries):
     """
@@ -277,6 +310,10 @@ class QsqiPPG(HeartSeries):
         self.slicez, self.islicez, self.corrs = slicez, islicez, corrs
         # TODO: penalize the correlation of overlong IBIs (since correlation only goes until the beat template ends)
 
+        # debug: put shape envelopes
+        self.env_min = sqi_copy_to_idxs(self.s_min, len(self.x), self.ibeats.astype(int), [sqi_slice_norm(sl) for sl in slicez])
+        self.env_max = sqi_copy_to_idxs(self.s_max, len(self.x), self.ibeats.astype(int), [sqi_slice_norm(sl) for sl in slicez])
+
     def beat_template_2(self):
         slicez, template_1, corrs = self.slicez, self.template_1, self.corrs
         #print 'corrs', corrs
@@ -298,11 +335,14 @@ class QsqiPPG(HeartSeries):
         si = np.where(self.tbeats > self.lock_time)[0][0] if self.lock_time is not None else 0
         slicez = sqi_slices(self, method)[si:]
         igood = np.arange(si, len(slicez)+si) # attention: len(slicez) is shorter if we use [si:] above
+        ig_orig = np.array(igood)
 
         if scrub:
             step1, good1 = sqi_remove_ibi_outliers(slicez, debug_errors=self.debug_errors)
+            self.ibad1 = np.array(sorted(list(set(ig_orig) - set(good1))))
             igood = igood[good1]
-            step2, good2 = sqi_remove_shape_outliers(step1, debug_errors=self.debug_errors)
+            step2, good2, self.s_min, self.s_max = sqi_remove_shape_outliers(step1, debug_errors=self.debug_errors, get_envelopes=True)
+            self.ibad2 = np.array(sorted(list(set(igood) - set(good2))))
             igood = igood[good2]
             assert len(step2) == len(igood)
         else:
@@ -374,6 +414,28 @@ class QsqiPPG(HeartSeries):
     #def sqi4(self):
     #    """SQI based on Kurtosis."""
 
+    def plot(self, plotter=None, dt=0.0, **kwargs):
+        """debug plot"""
+
+        import matplotlib.pyplot as plt
+
+        plotter = plt if plotter is None else plotter
+
+        def fmt(n):
+            s = '%.02f' % n
+            return s[1:] if s[0] == '0' else '.99'
+
+        for ii, i in enumerate(self.islicez):
+            # for ii, i in enumerate(np.arange(len(ppgz.ibeats) - 1)):
+            bl = np.percentile(self.x, 90) * 0.3
+            ym = 0 if ii % 2 == 0 else bl
+            is_good = (self.corrs[ii] > QsqiPPG.CC_THR) and i in self.ibis_good
+            plotter.text(self.tbeats[i], ym + bl, fmt(self.corrs[ii]), color='g' if is_good else 'r')
+
+        #plotter.plot(self.t, self.env_min, c='g')
+        #plotter.plot(self.t, self.env_max, c='r')
+        plotter.fill_between(self.t, self.env_min, self.env_max, facecolor='lightgray')
+        super(QsqiPPG, self).plot(plotter=plotter, dt=dt, **kwargs)
 
 class BeatQuality(QsqiPPG):
     """
