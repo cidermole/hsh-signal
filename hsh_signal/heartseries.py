@@ -87,6 +87,8 @@ class HeartSeries(Series):
 
     def slice(self, s):
         want_idxs = np.arange(len(self.x))[s]
+        if len(want_idxs) == 0:
+            return HeartSeries(np.zeros(0), np.zeros(0, dtype=int), self.fps, self.lpad)
         iib = np.where((self.ibeats >= want_idxs[0]) & (self.ibeats <= want_idxs[-1]))[0]
         return HeartSeries(self.x[s], self.ibeats[iib] - want_idxs[0], self.fps, self.lpad)
 
