@@ -125,7 +125,12 @@ def sqi_remove_ibi_outliers(slicez, debug_errors=False, keep_all=False):
     # say 300 ms SDNN on a 800 ms RR -> 0.38
     rel_dev_limit = 0.38  #: add this relative amount of tolerance to IBI limits
     ibi_limit_perc = 0.1  #: as IBI limits, use this percentile on the IBI distribution, and add `rel_dev_limit`
+    ibi_bottom_perc = 0.3 #: as template length = Lmax, use this percentile on the IBI distribution (this is sensitive [1])
     #len_min, len_max = np.median(lens_ok) * (1.0 - rel_dev_limit), np.median(lens_ok) * (1.0 + rel_dev_limit)
+
+    # [1]
+    # if Lmax is too short, template matching will miss most of what's going on in each beat.
+    # also, the template is being used for calculation of key points, and those will fail if the beat template cut out is too short.
 
     # boundary-percentile limits
     len_max = np.percentile(lens_ok, 100.0 * (1.0 - ibi_limit_perc)) * (1.0 + rel_dev_limit)
@@ -147,7 +152,7 @@ def sqi_remove_ibi_outliers(slicez, debug_errors=False, keep_all=False):
 
     model_len_max = np.percentile(lens_ok, 100.0 * (1.0 - ibi_limit_perc)) * (1.0 + rel_dev_limit)
     model_len_min = np.percentile(lens_ok, 100.0 * ibi_limit_perc) * (1.0 - rel_dev_limit)
-    model_len_bottom = np.percentile(lens_ok, 100.0 * ibi_limit_perc)
+    model_len_bottom = np.percentile(lens_ok, 100.0 * ibi_bottom_perc)
     #print 'model_len_bottom', model_len_bottom
     #print 'model_len_min', model_len_min, 'model_len_max', model_len_max
     max_filter = np.where(lens_ok < model_len_max)[0]
@@ -159,7 +164,7 @@ def sqi_remove_ibi_outliers(slicez, debug_errors=False, keep_all=False):
     # Lmax = max(lens_ok)
     # model_len_bottom: almost all waveshapes should still be present for the mean calculation.
     Lmax = int(model_len_bottom)
-    #print 'Lmax=', Lmax
+    print 'Lmax=', Lmax
     if keep_all: ibeat_ok = np.arange(len(slicez))
     slicez = np.array([sig_pad(s, L=Lmax) for s in slicez[ibeat_ok]])
 
@@ -196,6 +201,10 @@ def sqi_remove_shape_outliers(slicez, debug_errors=False, get_envelopes=False):
     # avoid large beats being detected as outliers.
     slicez_norm = sqi_normalize_slices(slicez)
     #slicez_norm = np.array(slicez)
+
+    # TODO:
+    # if percentile envelopes start becoming dissimilar, then something is fishy and the percentiles should be reduced.
+    # see 1500966653_***REMOVED***_percentile_envelope_dissimilarity.png
 
     # limiting lower and upper beat shape envelopes
     amplitude_limit_perc = 0.1
