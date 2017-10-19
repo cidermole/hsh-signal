@@ -166,6 +166,7 @@ def localmax_climb(arr, loc, hwin):
     locp = loc + hwin
     for lp in locp:
         im = (lp-hwin) + np.argmax(arrp[lp-hwin:lp+hwin+1]) - hwin
+        im = min(max(im, 0), len(arr)-1)  # clip
         new_loc.append(im)
     return np.array(new_loc)
 
@@ -251,10 +252,12 @@ def localmax_interp(x, idxs, hwin_size=None):
     :returns float indices into `x`
     """
     idxs = localmax_climb(x, idxs, hwin_size) if hwin_size is not None else idxs
+    assert np.all(idxs < len(x))
+    assert np.all(idxs >= 0)
     der = np.pad(np.diff(x), (1, 1), 'constant')
     new_idxs = []
     for i in idxs:
         xp, fp = der[i:i+2], np.array([i,i+1])
         ii = interp1d(xp, fp, bounds_error=False, fill_value=i)([0])
-        new_idxs.append(max(min(ii, i+1), i))
+        new_idxs.append(max(min(ii, i+1, len(x)-1), i))
     return np.array(new_idxs)
