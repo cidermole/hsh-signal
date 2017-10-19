@@ -109,8 +109,9 @@ class BeatParseError(Exception):
 
 
 class BeatShape(object):
-    def __init__(self, beat_template):
+    def __init__(self, beat_template, fps=30.0):
         self.template = beat_template
+        self.fpsl = fps
         self.parse()
 
     def plot(self):
@@ -118,16 +119,17 @@ class BeatShape(object):
         t_fine = self.t_fine
         dbeat_dt = np.diff(beat_fine)
         dbeat_dt2 = np.diff(np.diff(beat_fine))
-        dbeat_dt2_smooth = lowpass(dbeat_dt2, fps=300., cf=10.0, tw=2.)
+        dbeat_dt2_smooth = lowpass(dbeat_dt2, fps=self.fpsh, cf=10.0, tw=2.)
 
         fig, ax = plt.subplots(2, sharex=True)
         ax[0].plot(self.t, self.beat_shape)
         ax[0].plot(t_fine, beat_fine, 'r')
         # ax[1].plot(t[:-1], np.diff(beatshape), 'r')
         ax[1].plot(t_fine[:-1], dbeat_dt * 10, 'b')
-        ax[1].plot(t_fine[:-2], dbeat_dt2 * 100, 'k')
-        ax[1].plot(t_fine[:-2], dbeat_dt2_smooth * 100, 'y')
-        ax[1].scatter([t_fine[self.imin]], [(dbeat_dt2_smooth * 100)[self.imin]], c='g')  # chosen local minimum
+        scale_2 = 2000
+        ax[1].plot(t_fine[:-2], dbeat_dt2 * scale_2, 'k')
+        ax[1].plot(t_fine[:-2], dbeat_dt2_smooth * scale_2, 'y')
+        ax[1].scatter([t_fine[self.imin]], [(dbeat_dt2_smooth * scale_2)[self.imin]], c='g')  # chosen local minimum
         ax[0].scatter([t_fine[self.imin]], [beat_fine[self.imin]], c='g')  # chosen local minimum
 
         #
@@ -155,8 +157,10 @@ class BeatShape(object):
         # shift concat template vertically so the lines fit neatly
         # beatshape = -1 * np.concatenate((sq.template[:-1], -sq.template[0] + sq.template[-1] + sq.template))[:-len(sq.template) / 2] # always inverted on mobile
         beat_shape = self.template
-        t = np.linspace(0.0, len(beat_shape) / 30.0, len(beat_shape), False)
-        t_fine = np.linspace(0.0, t[-1], len(beat_shape) * 10, False)
+        t = np.linspace(0.0, len(beat_shape) / self.fpsl, len(beat_shape), False)
+        self.fps_ratio = 10
+        self.fpsh = self.fpsl * self.fps_ratio
+        t_fine = np.linspace(0.0, t[-1], len(beat_shape) * self.fps_ratio, False)
         self.t, self.t_fine, self.beat_shape = t, t_fine, beat_shape
 
         bsp = interp1d(t, beat_shape, kind='cubic')
@@ -169,7 +173,7 @@ class BeatShape(object):
 
         # look for local minimum in second derivative.
         dbeat_dt2 = np.diff(np.diff(beat_fine))
-        dbeat_dt2_smooth = lowpass(dbeat_dt2, fps=300., cf=10.0, tw=2.)
+        dbeat_dt2_smooth = lowpass(dbeat_dt2, fps=self.fpsh, cf=10.0, tw=2.)
 
         ipeak = np.argmax(beat_fine)  # TODO: what if first peak is not the highest?
         ifoot = np.argmin(beat_fine[ipeak:]) + ipeak
@@ -225,6 +229,14 @@ class BeatShape(object):
         #aixs.append(aix3)
         self.aix2 = aix2
         self.aix3 = aix3
+
+        self.ifoot2 = ifoot2
+        self.ifoot3 = ifoot3
+        self.isys = iforward_peak
+        self.idia = imin
+
+        times = tuple([v / float(self.fpsh) for v in [self.ifoot2, self.ifoot3, self.isys, self.idia]])
+        self.t_f, self.t_i, self.t_sys, self.t_dia = times
 
 
 class LazyDict(dict):
@@ -497,7 +509,24 @@ class AppData:
 
         return ppg
 
+    def qsqi_zong(self):
+        from hsh_beatdet.zong import ZongDetector
+
+        zd = ZongDetector()
+        zd.detect(self.ppg_raw())
+        ppgz = zd.get_result()
+
+        try:
+            QsqiPPG.BEAT_THR = 0.25
+            sq = QsqiPPG.from_heart_series(ppgz.upsample(10), lock_time=self.lock_time())
+        except QsqiError as e:
+            print e
+            return None
+
+        return sq
+
     def qsqi(self):
+        raise Warning('QsqiPPG has been reworked for Zong detector. you must change the location of beats to feet instead of slopes.')
         self.series_data.load()
         ppg_data = self.series_data['ppg_data']  # (N,4) matrix with [t,r,g,b] rows
         times, series = ppg_data[:,0], ppg_data[:,1]  # red channel
@@ -537,9 +566,9 @@ class AppData:
         return sq
 
     def beat_shape(self):
-        ppg = self.ppg_parse_beatdetect('getrr', use_cache=False)
         try:
-            sq = self.qsqi()
+            #sq = self.qsqi()
+            sq = self.qsqi_zong()
         except IndexError as e:
             # trying to access ibeats[-1]
             raise BeatParseError(e)
@@ -547,7 +576,7 @@ class AppData:
             # File "/mnt/hsh/hsh-beatdet/hsh_beatdet/ML/ppg_beatdetector_v2.py", line 66, in getrr_v2
             # raise Warning("Warning: Tiny data shape", data.shape[0])
             raise BeatParseError(e)
-        return BeatShape(-1 * sq.template)
+        return BeatShape(-1 * sq.template, fps=sq.fps)
 
     def ppg_footed(self):
         """return upsampled and footed (detrended) PPG."""
@@ -555,6 +584,12 @@ class AppData:
         ppg_raw_l = self.ppg_raw()
         ppg_l = self.ppg_parse_beatdetect('getrr')
         return ppg_wave_foot(ppg_raw_l, ppg_l)
+
+    def ppg_footed_zong(self):
+        from hsh_beatdet.zong import ZongDetector
+        zd = ZongDetector()
+        zd.detect(self.ppg_raw())
+        return zd.get_result()
 
     def ecg_ppg_aligned(self):
         """>>> ecg, ppg, ecg_ibs, ppg_ibs = ad.ecg_ppg_aligned()"""
