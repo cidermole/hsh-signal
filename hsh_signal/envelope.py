@@ -1,5 +1,5 @@
 import numpy as np
-from hsh_signal.signal import cross_corr
+from .signal import cross_corr
 
 
 def envelopes_at_perc(slicez, perc=10):
