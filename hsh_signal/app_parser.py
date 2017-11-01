@@ -109,9 +109,10 @@ class BeatParseError(Exception):
 
 
 class BeatShape(object):
-    def __init__(self, beat_template, fps=30.0):
+    def __init__(self, beat_template, fps=30.0, duration=None):
         self.template = beat_template
         self.fpsl = fps
+        self.t_cyc = duration
         self.parse()
 
     def plot(self):
@@ -130,6 +131,7 @@ class BeatShape(object):
         ax[1].plot(t_fine[:-2], dbeat_dt2 * scale_2, 'k')
         ax[1].plot(t_fine[:-2], dbeat_dt2_smooth * scale_2, 'y')
         ax[1].scatter([t_fine[self.imin]], [(dbeat_dt2_smooth * scale_2)[self.imin]], c='g')  # chosen local minimum
+        ax[1].scatter([t_fine[self.idic]], [(dbeat_dt2_smooth * scale_2)[self.idic]], c='m')  # chosen local maximum
         ax[0].scatter([t_fine[self.imin]], [beat_fine[self.imin]], c='g')  # chosen local minimum
 
         #
@@ -194,6 +196,8 @@ class BeatShape(object):
         #imin = ilocalmin[np.argmin(dbeat_dt2[ilocalmin])]
         imin = ilocalmin[np.argmin(dbeat_dt2_smooth[ilocalmin])]
 
+        # TODO: should green point be in blue zero crossing (earlier), instead of .
+
         # TODO: stability estimates. on the smoothed curve, how much wiggling room is there, how clear=pronounced is the minimum?
 
         # TODO: fit to all data points (slices), instead of just to the mean!
@@ -218,12 +222,18 @@ class BeatShape(object):
         #ax[0].scatter([t_fine[ifoot2]], [foot2], c='b')  # foot
 
         # or, it could also be the maximum of second derivative -- more stable?!
-        ifoot3 = np.argmax(dbeat_dt2[:len(dbeat_dt2) * 2 // 3])
+        ifoot3 = np.argmax(dbeat_dt2_smooth[:len(dbeat_dt2_smooth) * 2 // 3])
         foot3 = beat_fine[ifoot3]
         #ax[0].scatter([t_fine[ifoot3]], [foot3], c='r')  # foot
 
         aix2 = (forward_peak - reflection_peak) / (forward_peak - foot2)
         aix3 = (forward_peak - reflection_peak) / (forward_peak - foot3)
+
+        #self.idic = np.argmax(dbeat_dt2[iforward_peak:]) + iforward_peak
+        idic_peaks = np.where(localmax(dbeat_dt2_smooth[iforward_peak:]))[0] + iforward_peak
+        if len(idic_peaks) == 0:
+            raise BeatParseError('dicrotic notch not found')
+        self.idic = idic_peaks[0]
 
         #hrs.append(hr)
         #aixs.append(aix3)
@@ -235,8 +245,23 @@ class BeatShape(object):
         self.isys = iforward_peak
         self.idia = imin
 
-        times = tuple([v / float(self.fpsh) for v in [self.ifoot2, self.ifoot3, self.isys, self.idia]])
-        self.t_f, self.t_i, self.t_sys, self.t_dia = times
+        #self.idia / self.ifoot3
+        self.apk = dbeat_dt2_smooth[self.ifoot3]
+        self.dpk = dbeat_dt2_smooth[self.idia]
+
+        times = tuple([v / float(self.fpsh) for v in [self.ifoot2, self.ifoot3, self.isys, self.idia, self.idic]])
+        self.t_f, self.t_i, self.t_sys, self.t_dia, self.t_dic = times
+
+        self.features = {
+            'd_sys': (self.t_dic - self.t_i),
+            't_sys_dia': (self.t_dia - self.t_sys),
+            't_rise': (self.t_sys - self.t_i),
+            't_dia_rise': (self.t_dia - self.t_dic),
+            'aix': (self.aix3),
+            'd_per_a': (self.dpk / self.apk),
+            't_cyc': (self.t_cyc),
+            #'bpm': (60.0 / self.t_cyc)
+        }
 
 
 class LazyDict(dict):
@@ -360,7 +385,8 @@ class AppData:
             with open(cache_file, 'wb') as fo:
                 pickle.dump(ecg, fo)
 
-        # note: we do not yet honor series_data['audio_start'] here.
+        self.series_data.load()
+        ecg.shift(-self.series_data['audio_start'])
 
         return ecg
 
@@ -421,11 +447,11 @@ class AppData:
             return 0.0
         return float(len(ts) - 1) / (ts[-1] - ts[0])
 
-    def ppg_raw(self):
+    def ppg_raw(self, channel=1):
         ppg_data_uneven = self.series_data['ppg_data']
 
         ppg_fps = 30.0
-        ppg_data = evenly_resample(ppg_data_uneven[:,0], ppg_data_uneven[:,1], target_fps=ppg_fps)
+        ppg_data = evenly_resample(ppg_data_uneven[:,0], ppg_data_uneven[:,channel], target_fps=ppg_fps)
         ts = ppg_data[:,0]
         return Series(ppg_data[:,1], fps=ppg_fps, lpad=-ts[0]*ppg_fps)
 
@@ -576,7 +602,7 @@ class AppData:
             # File "/mnt/hsh/hsh-beatdet/hsh_beatdet/ML/ppg_beatdetector_v2.py", line 66, in getrr_v2
             # raise Warning("Warning: Tiny data shape", data.shape[0])
             raise BeatParseError(e)
-        return BeatShape(-1 * sq.template, fps=sq.fps)
+        return BeatShape(-1 * sq.template, duration=60.0 / sq.heart_rate(), fps=sq.fps)
 
     def ppg_footed(self):
         """return upsampled and footed (detrended) PPG."""
@@ -607,6 +633,22 @@ class AppData:
         ppg_ibs, ecg_ibs = ppg.aligned_iibeats(ecg, ppg_dt=0.0)
 
         return ecg, ppg, ecg_ibs, ppg_ibs
+
+    def has_result(self, key=None):
+        """calls HS API /reclassify if necessary (if result not yet cached).
+        :returns result dict with keys ['pred', 'filtered', 'idx']"""
+        cache_files = [
+            self.meta_filename.replace('_meta', '_result'),
+            os.path.join(AppData.CACHE_DIR, os.path.basename(self.meta_filename) + '_result.b')
+            ]
+        for cache_file in cache_files:
+            if os.path.exists(cache_file):
+                try:
+                    res = load_zipped_pickle(cache_file)
+                    if key is not None: return (key in res)
+                    return True
+                except:
+                    return False
 
     def get_result(self, reclassify=False, host='https://mlapi.heartshield.net'):
         """calls HS API /reclassify if necessary (if result not yet cached).
