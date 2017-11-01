@@ -40,18 +40,33 @@ def sig_resample(self, sig, L = None):
     return np.interp(t, np.arange(len(sig)), sig)
 
 
-def sig_pad(sig, L):
+def sig_pad(sig, L, side='right', mode='edge'):
     """pad up with zeros to length L on the right. trims if necessary."""
-    if len(sig) > L:
-        # trim
-        return np.array(sig[0:L])
-    return np.pad(sig, (0, L - len(sig)), mode='edge')
+    if side == 'right':
+        if len(sig) > L:
+            # trim
+            return np.array(sig[0:L])
+        return np.pad(sig, (0, L - len(sig)), mode=mode)
+    elif side == 'center':
+        if len(sig) > L:
+            # trim
+            overlap = len(sig) - L
+            front = overlap // 2
+            back = overlap - front
+            return np.array(sig[front:len(sig)-back])
+        add = L - len(sig)
+        front = add // 2
+        back = add - front
+        return np.pad(sig, (front, back), mode=mode)
+    else:
+        raise ValueError('invalid mode for sig_pad()')
 
 
 SLICE_FRONT = 0.2
+SLICE_BACK = 0.0
 
-
-def sqi_slices(sig, method='direct'):
+def sqi_slices(sig, method='direct', slice_front=0.2, slice_back=0.0):
+    # SLICE_FRONT, SLICE_BACK: increase in window size around beats, in length-relative units
     if method == 'fixed':
         slicez = []
         for i in range(len(sig.ibeats) - 1):
@@ -60,7 +75,7 @@ def sqi_slices(sig, method='direct'):
             l = e - s
             assert l > 0, "ibeats must be strictly ascending"
             # s,e = max(s-l*0.1, 0), max(min(e-l*0.1, len(sig.x)), 0)
-            s, e = max(s - l * SLICE_FRONT, 0), max(min(e, len(sig.x)), 0)
+            s, e = max(s - l * slice_front, 0), max(min(e + l * slice_back, len(sig.x)), 0)
 
             if s != e:
                 # plt.plot(sig.x[s:e])
