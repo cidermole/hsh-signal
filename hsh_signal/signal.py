@@ -12,6 +12,12 @@ def hz2bpm(f_hz):
     return f_hz * 60.0
 
 
+def gauss(x, t_mu, t_sigma):
+    a = 1.0 / (t_sigma * np.sqrt(2 * np.pi))
+    y = a * np.exp(-0.5 * (x - t_mu)**2 / t_sigma**2)
+    return y
+
+
 def hilbert_fc(x):
     """Hilbert Transform: recover analytic signal (float -> complex)"""
 
@@ -261,3 +267,11 @@ def localmax_interp(x, idxs, hwin_size=None):
         ii = interp1d(xp, fp, bounds_error=False, fill_value=i)([0])
         new_idxs.append(max(min(ii, i+1, len(x)-1), i))
     return np.array(new_idxs)
+
+
+def dirac(length, idxs, dtype=bool):
+    """:returns an array with the specified `idxs` set to 1."""
+    arr = np.zeros(length, dtype=dtype)
+    idxs = np.array(idxs)
+    arr[idxs] = 1.0
+    return arr

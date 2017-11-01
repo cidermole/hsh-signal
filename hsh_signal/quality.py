@@ -179,7 +179,7 @@ def sqi_remove_ibi_outliers(slicez, debug_errors=False, keep_all=False):
     # Lmax = max(lens_ok)
     # model_len_bottom: almost all waveshapes should still be present for the mean calculation.
     Lmax = int(model_len_bottom)
-    print 'Lmax=', Lmax
+    if debug_errors: print 'Lmax=', Lmax
     if keep_all: ibeat_ok = np.arange(len(slicez))
     slicez = np.array([sig_pad(s, L=Lmax) for s in slicez[ibeat_ok]])
 
@@ -351,6 +351,18 @@ class QsqiPPG(HeartSeries):
         self.env_min = sqi_copy_to_idxs(self.s_min, len(self.x), self.ibeats.astype(int), [sqi_slice_norm(sl) for sl in slicez])
         self.env_max = sqi_copy_to_idxs(self.s_max, len(self.x), self.ibeats.astype(int), [sqi_slice_norm(sl) for sl in slicez])
 
+    def heart_rate(self):
+
+        pl, pu = 20, 80
+        z_ibis = np.diff(self.tbeats)[self.ibis_good[np.where(self.ibis_good < len(self.tbeats)-1)[0]]]
+        zs_lower = np.percentile(z_ibis, pl)
+        zs_upper = np.percentile(z_ibis, pu)
+
+        zs_mean = np.mean(z_ibis[np.where((z_ibis > zs_lower) & (z_ibis < zs_upper))[0]])
+        #zs_median = np.median(z_ibis)
+
+        return 60.0 / zs_mean
+
     def beat_template_2(self):
         slicez, template_1, corrs = self.slicez, self.template_1, self.corrs
         #print 'corrs', corrs
@@ -371,7 +383,7 @@ class QsqiPPG(HeartSeries):
 
     def slices(self, method='direct', scrub=True):
         si = np.where(self.tbeats > self.lock_time)[0][0] if self.lock_time is not None else 0
-        slicez = sqi_slices(self, method)[si:]
+        slicez = sqi_slices(self, method, slice_front=SLICE_FRONT, slice_back=SLICE_BACK)[si:]
         igood = np.arange(si, len(slicez)+si) # attention: len(slicez) is shorter if we use [si:] above
         ig_orig = np.array(igood)
 

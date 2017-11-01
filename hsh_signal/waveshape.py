@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from hsh_signal.signal import localmax, lowpass
+from hsh_signal.signal import localmax, lowpass, lowpass_fft
 from scipy.interpolate import interp1d
 
 
@@ -20,7 +20,7 @@ def ppg_wave_foot(ppg_raw_l, ppg_l):
     #
     ratio=10  # use same ratio for all!
     ppg_smoothed = ppg_l.upsample(ratio)
-    ppg_smoothed.x = lowpass(ppg_smoothed.x, ppg_smoothed.fps, cf=6.0, tw=0.5)
+    ppg_smoothed.x = lowpass_fft(ppg_smoothed.x, ppg_smoothed.fps, cf=6.0, tw=0.5)
 
     # fill `ileft_min` with index of next local minimum to the left
     # for noise robustness, use some smoothing before
@@ -62,7 +62,7 @@ def beat_baseline(ppg_feet, ppg_beats):
     ibis = np.diff(ppg.tbeats)
     median_ibi = np.median(ibis)
     long_ibis = np.where(ibis > 1.5 * median_ibi)[0]
-    print 'long_ibis', long_ibis
+    #print 'long_ibis', long_ibis
     ib_start = ppg.ibeats[long_ibis]
     ib_end = ppg.ibeats[np.clip(long_ibis + 1, 0, len(ppg.ibeats))]
     if len(ib_end) < len(ib_start): ib_end = np.insert(ib_end, len(ib_end), len(ppg.x) - 1)
@@ -70,10 +70,10 @@ def beat_baseline(ppg_feet, ppg_beats):
     # to do: actually use raw average baseline, not some random value at a picked index
     extra_ibeats = []
     for s, e in zip(ib_start, ib_end):
-        print 's,e', s, e, ppg.t[s], ppg.t[e]
+        #print 's,e', s, e, ppg.t[s], ppg.t[e]
         extra_ibeats += list(np.arange(s + fps * median_ibi, e - 0.5 * median_ibi * fps, fps * median_ibi).astype(int))
 
-    print 'extra_ibeats', extra_ibeats, 'extra_tbeats', ppg.t[extra_ibeats]
+    #print 'extra_ibeats', extra_ibeats, 'extra_tbeats', ppg.t[extra_ibeats]
 
     ibeats = np.array(sorted(list(ibeats) + list(extra_ibeats)))
     xu[ibeats] = ppg.x[ibeats]
@@ -85,7 +85,7 @@ def beat_baseline(ppg_feet, ppg_beats):
 
     f_cf = 1.8
     f_tw = f_cf / 2.0
-    xu_filtered = lowpass(xul, ppg.fps, cf=f_cf, tw=f_tw)  # * scaling  # * ratio
+    xu_filtered = lowpass_fft(xul, ppg.fps, cf=f_cf, tw=f_tw)  # * scaling  # * ratio
 
     if False:
         plt.plot(ppg.t, np.clip(xu_filtered, a_min=220, a_max=270), c='b')
