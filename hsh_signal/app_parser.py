@@ -22,6 +22,9 @@ import requests
 import json
 from .hsh_data import MyJSONEncoder
 
+from datetime import datetime, timedelta
+from bisect import bisect_left
+
 
 def classify_results(meta_data, series_data, host='https://mlapi.heartshield.net'):
     post_data = {
@@ -290,31 +293,54 @@ class ResearchUser:
     def __init__(self, ad):
         #self.ad = ad
         self.model, self.app_id, self.age, self.gender = ad.model(), ad.app_id(), ad.age(), ad.gender()
+        self.start_time = ad.start_time()
+        self.mode = ad.mode()
 
     def is_david(self):
         is_model = (self.model in ['Nexus 5X'])
         is_age = self.age and (self.age >= 25 and self.age <= 26)
         return is_model and is_age
 
+    def is_cad(self):
+        """coronary exercise group in ***REMOVED***, with participants stopping to be measured during their programme."""
+        return self.is_special_group('cad')
 
-# for m in ms:
-#     mf = os.path.basename(m.meta_filename)
-#     st = m.meta_data['start_time']
-#     t_from, t_to = datetime(2017,6,1), datetime(2017,6,7)
-#     is_prolific_timespan = (st >= t_from and st < t_to)
-#
-#     may_david = (m.model() == 'Nexus 5X' and m.age() == 25)
-#     may_tom1 = (m.model() == 'NEM-L51' and (m.age() == 28 or m.age() == '28'))
-#     may_tom2 = (m.app_id() == '2A63ADA2' or m.app_id() == '93EC648F')
-#     may_tom = may_tom1 or may_tom2
-#     if is_prolific_timespan and may_david: nums['david'] += 1
-#     elif is_prolific_timespan and may_tom: nums['tom'] += 1
-#     elif is_prolific_timespan: nums['other'] += 1
-#
-#     is_prolific = is_prolific_timespan and not (may_david or may_tom)
-#
-#     if is_prolific:
-#         prolific_measurements.append(m)
+    def is_diab(self):
+        """Diabetic meetup group in ***REMOVED*** during the summer, with elderly pensioners / non-holiday-goers."""
+        return self.is_special_group('diabetes')
+
+    def is_control(self):
+        """
+        Control group from Prolific study with (I assume) unselected participants -- likely a group of
+        stay-at-home people, possibly less fit than average but nevertheless 'normal'.
+        """
+        t_from, t_to = datetime(2017, 6, 1), datetime(2017, 6, 7)
+        is_prolific_timespan = (self.start_time >= t_from and self.start_time < t_to)
+
+        may_david = (self.model == 'Nexus 5X' and self.age == 25)
+        may_tom1 = (self.model == 'NEM-L51' and (self.age == 28 or self.age == '28'))
+        may_tom2 = (self.app_id == '2A63ADA2' or self.app_id == '93EC648F')
+        may_tom = may_tom1 or may_tom2
+
+        return is_prolific_timespan and not (may_david or may_tom)
+
+    def is_cheek_seated(self):
+        return self.is_special_group('prolific2') and self.mode == 'vital_check_seated'
+
+    def is_cheek_supine(self):
+        return self.is_special_group('prolific2') and self.mode == 'vital_check_supine'
+
+    def is_special_group(self, gtype):
+        key_periods = {
+            'diabetes': (['***REMOVED***'], datetime(2017, 6, 20, 18, 0, 0), datetime(2017, 6, 20, 19, 30, 0)),
+            'cad': (['***REMOVED***'], datetime(2017, 9, 20, 15, 48, 0), datetime(2017, 9, 20, 17, 33, 0)),
+            'prolific2': (lambda app_id: app_id.startswith('R'), datetime(2017, 12, 12, 12, 0, 0), datetime(2017, 12, 13, 15, 0, 0))
+        }
+
+        aids, st, et = key_periods[gtype]
+        in_time = (st <= self.start_time < et)
+
+        return (self.app_id in aids or (callable(aids) and aids(self.app_id))) and in_time
 
 
 class AppData:
