@@ -6,6 +6,16 @@ from .heartseries import Series, HeartSeries
 from sklearn.linear_model import TheilSenRegressor
 
 
+from ishneholterlib import Holter
+from heartseries import Series
+
+from quality import sqi_slices, sig_pad
+from envelope import envelopes_perc_threshold, envelopes_at_perc
+from envelope import beat_penalty_threshold, beat_penalty
+
+from signal import cross_corr
+
+
 class NoisyECG(object):
     """TODO: this class should not leak out anywhere. Rename and fix external things that break. Then, redesign scrub_ecg()"""
     GOOD_BEAT_THRESHOLD = 0.5  #: normalized cross-correlation threshold for good beats, when compared vs. the median
@@ -327,3 +337,53 @@ def fix_ecg_peaks(ecg, plt=None):
     ecg.ibeats = np.ravel(fixed_indices).astype(int)
 
     return ecg
+
+
+def ecg_kept(raw):
+    sig0 = raw
+
+    fps = sig0.fps
+
+    # print 'slice.x shape=', sig0.slice(slice(int(0*fps), int(ECG_DURATION*fps))).x.shape
+    ###
+
+    ecg = beatdet_ecg(sig0.slice(slice(int(0 * fps), int(ECG_DURATION * fps))))
+    ecg.lead = LEADS[ECG_LEAD]
+
+    # scaling for plot
+    pcs = np.array([np.percentile(ecg.x, 10), np.percentile(ecg.x, 90)])
+    pcs = (pcs - np.mean(pcs)) * 5.0 + np.mean(pcs)
+
+    ###
+
+    slicez = sqi_slices(ecg, method='fixed', slice_front=0.5, slice_back=-0.5)
+    L = max([len(sl) for sl in slicez])
+    padded_slicez = np.array([sig_pad(sl, L, side='center', mode='constant') for sl in slicez])
+
+    ###
+
+    perc = envelopes_perc_threshold(padded_slicez)
+    le, ue = envelopes_at_perc(padded_slicez, perc)
+    mb = np.median(padded_slicez, axis=0)
+
+    bpt = beat_penalty_threshold(le, ue, mb)
+
+    bps = np.array([beat_penalty(sl, le, ue, mb) for sl in padded_slicez])
+
+    bp_ok = bps < bpt
+
+    ###
+
+    template = np.median(padded_slicez, axis=0)
+    corrs = np.array([cross_corr(sl, template) for sl in padded_slicez])
+
+    CORR_THRESHOLD = 0.8
+    corr_ok = corrs > CORR_THRESHOLD
+
+    ###
+
+    # next beat is OK as well?
+    bp_ibi_ok = bp_ok & np.roll(bp_ok, -1)
+    corr_ibi_ok = corr_ok & np.roll(corr_ok, -1)
+
+    igood = np.where(bp_ibi_ok & corr_ibi_ok)[0]
