@@ -716,6 +716,10 @@ class AppData:
     def app_version(self):
         return self.meta_data['app_info']['version'] if ('app_info' in self.meta_data and 'version' in self.meta_data['app_info']) else None
 
+    def mode(self):
+        # TODO: fetch from Android / v3 data (not included by server in v2... doh.)
+        return self.meta_data['mode'] if ('mode' in self.meta_data) else 'risk'
+
     def app_codename(self):
         return self.meta_data['app_info']['codename'] if ('app_info' in self.meta_data and 'codename' in self.meta_data['app_info']) else None
 
