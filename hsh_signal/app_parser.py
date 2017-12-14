@@ -290,11 +290,14 @@ class LazyDict(dict):
 
 
 class ResearchUser:
+    good_mfs_supine = {'***REMOVED***'}
+
     def __init__(self, ad):
         #self.ad = ad
         self.model, self.app_id, self.age, self.gender = ad.model(), ad.app_id(), ad.age(), ad.gender()
         self.start_time = ad.start_time()
         self.mode = ad.mode()
+        self.mf = ad.mf()
 
     def is_david(self):
         is_model = (self.model in ['Nexus 5X'])
@@ -324,11 +327,24 @@ class ResearchUser:
 
         return is_prolific_timespan and not (may_david or may_tom)
 
+    def is_group(self, gname):
+        fname = 'is_' + gname
+        if not hasattr(self, fname):
+            raise AttributeError('no group named "{}"'.format(gname))
+        return getattr(self, fname)()
+
     def is_cheek_seated(self):
         return self.is_special_group('prolific2') and self.mode == 'vital_check_seated'
 
     def is_cheek_supine(self):
         return self.is_special_group('prolific2') and self.mode == 'vital_check_supine'
+
+    def is_cheek_supine_sel(self):
+        """
+        manually selected to avoid major clipping, non-locking behavior.
+        NOTE that this is using an early camera driver from 2017-12-12 and is only a 30% subset where the driver worked.
+        """
+        return self.mf in self.good_mfs_supine
 
     def is_special_group(self, gtype):
         key_periods = {
@@ -340,7 +356,7 @@ class ResearchUser:
         aids, st, et = key_periods[gtype]
         in_time = (st <= self.start_time < et)
 
-        return (self.app_id in aids or (callable(aids) and aids(self.app_id))) and in_time
+        return ((not callable(aids) and self.app_id in aids) or (callable(aids) and aids(self.app_id))) and in_time
 
 
 class AppData:
