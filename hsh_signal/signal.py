@@ -269,9 +269,33 @@ def localmax_interp(x, idxs, hwin_size=None):
     return np.array(new_idxs)
 
 
+#
+# Indexing tools
+#
+
+
 def dirac(length, idxs, dtype=bool):
     """:returns an array with the specified `idxs` set to 1."""
     arr = np.zeros(length, dtype=dtype)
     idxs = np.array(idxs)
     arr[idxs] = 1.0
     return arr
+
+
+def cohesive_ranges(idxs):
+    if sorted(list(idxs)) != list(idxs):
+        raise ValueError('idxs must be sorted')
+    if len(idxs) == 0:
+        return []
+
+    ranges = []
+    si, pi = idxs[0], idxs[0]
+    for i in idxs[1:]:
+        pi += 1
+        if i != pi:
+            ranges.append((si, pi))
+            si = i
+            pi = i
+    ranges.append((si, pi + 1))
+
+    return ranges
