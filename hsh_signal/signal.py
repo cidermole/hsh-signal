@@ -125,6 +125,31 @@ def evenly_resample(times, series, target_fps=30.0):
     data = np.vstack((np.reshape(even_times, -1, 1), np.reshape(series2, -1, 1))).T
     return data
 
+
+def grid_resample(times, series, target_fps=30.0):
+    """like `evenly_resample()`, but with precise grid spacing through tail padding."""
+    # add tail padding:
+    times = np.hstack((times, [times[-1] + times[-1] - times[-2]]))
+    series = np.hstack((series, [series[-1]]))
+    # the trail padding above ensures precise grid spacing until the last sample.
+    # Fractional index interpolation beyond the original end may leave a trailing constant value in the result output.
+
+    # note: the original `evenly_resample()` result was never intended to be used on its own, decoupled from its timestamps.
+
+    L = (times[-1] - times[0]) * target_fps
+    even_times = np.linspace(times[0], times[-1], L, endpoint=False)
+    series2 = np.interp(even_times, times, series)
+    data = np.vstack((np.reshape(even_times, -1, 1), np.reshape(series2, -1, 1))).T
+    return data
+
+    #  Example 3:1 extrapolation from [a, b, c]:
+    #
+    #  [ a . . b . . c . . (c) ]
+    #    _ _ _ _ _ _ _ _ _
+    #
+    #                  ^ these two interpolation points in the tail are constant, have no real support.
+
+
 def highpass(signal, fps, cf=0.5, tw=0.4):
     from gr_firdes import firdes
     cutoff_freq = cf

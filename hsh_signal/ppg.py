@@ -46,13 +46,13 @@ def ppg_beatdetect_brueser(ppg, debug=False):
 
 
 from hsh_signal.heartseries import Series
-from hsh_signal.signal import evenly_resample
+from hsh_signal.signal import grid_resample
 
 def make_series(mimic_ppg_curve):
     fps = 125.0
     x = -mimic_ppg_curve  # in MIMIC PPGs, beats move in positive direction. in our PPGs, they are light intensities (they are reversed).
     t = np.arange(len(x)) / float(fps)
-    ds = evenly_resample(t, x, target_fps=30.0)
+    ds = grid_resample(t, x, target_fps=30.0)
     return Series(ds[:,1], fps=30.0)
 
 ###

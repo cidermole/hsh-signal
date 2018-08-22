@@ -10,7 +10,7 @@ from collections import defaultdict
 
 from .pickling import load_zipped_pickle
 from .alivecor import decode_alivecor, beatdet_alivecor, load_raw_audio
-from .signal import evenly_resample, highpass
+from .signal import evenly_resample, grid_resample, highpass
 from .heartseries import Series
 from .ppg import ppg_beatdetect_brueser, ppg_beatdetect_getrr, beatdet_getrr_v2
 from hsh_signal.quality import QsqiPPG, QsqiError
@@ -493,7 +493,7 @@ class AppData:
         ppg_data_uneven = self.series_data['ppg_data']
 
         ppg_fps = 30.0
-        ppg_data = evenly_resample(ppg_data_uneven[:,0], ppg_data_uneven[:,channel], target_fps=ppg_fps)
+        ppg_data = grid_resample(ppg_data_uneven[:,0], ppg_data_uneven[:,channel], target_fps=ppg_fps)
         ts = ppg_data[:,0]
         return Series(ppg_data[:,1], fps=ppg_fps, lpad=-ts[0]*ppg_fps)
 
@@ -501,7 +501,7 @@ class AppData:
         ppg_data_uneven = self.series_data['ppg_data']
 
         ppg_fps = 30.0
-        ppg_data = evenly_resample(ppg_data_uneven[:,0], ppg_data_uneven[:,1], target_fps=ppg_fps)
+        ppg_data = grid_resample(ppg_data_uneven[:,0], ppg_data_uneven[:,1], target_fps=ppg_fps)
         ts = ppg_data[:,0]
         demean = highpass(highpass(ppg_data[:,1], ppg_fps), ppg_fps)
         trend = ppg_data[:,1] - demean
@@ -518,7 +518,7 @@ class AppData:
         axes = []
         ts = []
         for i in range(1,4):
-            resampled = evenly_resample(bcg_data_uneven[:,0], bcg_data_uneven[:,i], target_fps=fps)
+            resampled = grid_resample(bcg_data_uneven[:,0], bcg_data_uneven[:,i], target_fps=fps)
             axes.append(resampled[:,1])
             ts = resampled[:,0]
 
@@ -542,7 +542,7 @@ class AppData:
         times, series = ppg_data_uneven[:,0], ppg_data_uneven[:,1]  # red channel
 
         # cut off the first 5 seconds for classification, just like in the v1 /rawrfclassify API
-        data = evenly_resample(times, series)
+        data = grid_resample(times, series)
         istart = np.where(times - times[0] > 5.0)[0][0]
         data = data[istart:,:]
 
@@ -552,7 +552,7 @@ class AppData:
         ppg_data_uneven = self.series_data['ppg_data']
 
         ppg_fps = 30.0
-        ppg_data = evenly_resample(ppg_data_uneven[:,0], ppg_data_uneven[:,1], target_fps=ppg_fps)
+        ppg_data = grid_resample(ppg_data_uneven[:,0], ppg_data_uneven[:,1], target_fps=ppg_fps)
         ts = ppg_data[:,0]
         demean = highpass(highpass(ppg_data[:,1], ppg_fps), ppg_fps)
 
@@ -622,7 +622,7 @@ class AppData:
             lock_time = 5.0
 
         # cut off the first 5 seconds for classification, just like in the v1 /rawrfclassify API
-        data = evenly_resample(times, series)
+        data = grid_resample(times, series)
         istart = np.where(times - times[0] > lock_time)[0][0] if len(np.where(times - times[0] > lock_time)[0]) > 0 else 0
         data = data[istart:,:]
 
