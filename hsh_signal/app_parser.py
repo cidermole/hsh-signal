@@ -325,7 +325,7 @@ class ResearchUser:
         may_tom2 = (self.app_id == '2A63ADA2' or self.app_id == '93EC648F')
         may_tom = may_tom1 or may_tom2
 
-        return is_prolific_timespan and not (may_david or may_tom)
+        return is_prolific_timespan and not (may_david or may_tom) and self.age is not None
 
     def is_group(self, gname):
         fname = 'is_' + gname
@@ -588,8 +588,19 @@ class AppData:
             QsqiPPG.BEAT_THR = 0.25
             sq = QsqiPPG.from_heart_series(ppgz.upsample(10), lock_time=self.lock_time())
         except QsqiError as e:
-            print e
-            return None
+            raise BeatParseError(e)
+            #print e
+            #return None
+        except ValueError as e:
+            # trying to access ibeats[-1]
+            raise BeatParseError(e)
+        except IndexError as e:
+            # trying to access ibeats[-1]
+            raise BeatParseError(e)
+        except Warning as e:
+            # File "/mnt/hsh/hsh-beatdet/hsh_beatdet/ML/ppg_beatdetector_v2.py", line 66, in getrr_v2
+            # raise Warning("Warning: Tiny data shape", data.shape[0])
+            raise BeatParseError(e)
 
         return sq
 
@@ -634,16 +645,22 @@ class AppData:
         return sq
 
     def beat_shape(self):
-        try:
-            #sq = self.qsqi()
-            sq = self.qsqi_zong()
-        except IndexError as e:
-            # trying to access ibeats[-1]
-            raise BeatParseError(e)
-        except Warning:
-            # File "/mnt/hsh/hsh-beatdet/hsh_beatdet/ML/ppg_beatdetector_v2.py", line 66, in getrr_v2
-            # raise Warning("Warning: Tiny data shape", data.shape[0])
-            raise BeatParseError(e)
+        # now raises its own errors.
+        sq = self.qsqi_zong()
+
+        #try:
+        #    #sq = self.qsqi()
+        #    sq = self.qsqi_zong()
+        #except ValueError as e:
+        #    # trying to access ibeats[-1]
+        #    raise BeatParseError(e)
+        #except IndexError as e:
+        #    # trying to access ibeats[-1]
+        #    raise BeatParseError(e)
+        #except Warning:
+        #    # File "/mnt/hsh/hsh-beatdet/hsh_beatdet/ML/ppg_beatdetector_v2.py", line 66, in getrr_v2
+        #    # raise Warning("Warning: Tiny data shape", data.shape[0])
+        #    raise BeatParseError(e)
         return BeatShape(-1 * sq.template, duration=60.0 / sq.heart_rate(), fps=sq.fps)
 
     def ppg_footed(self):

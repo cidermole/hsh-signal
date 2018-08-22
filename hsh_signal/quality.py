@@ -303,7 +303,7 @@ class QsqiPPG(HeartSeries):
     """
 
     CC_THR = 0.8    #: cross-correlation threshold for including beats in template 2
-    BEAT_THR = 0.3  #: more beats thrown away? fail creating template 2
+    BEAT_THR = 0.3  #: fewer beats kept? fail creating template 2
 
     def __init__(self, *args, **kwargs):
         init_template = kwargs.pop('init_template', True)
@@ -314,7 +314,11 @@ class QsqiPPG(HeartSeries):
             self.init_template()
 
     def init_template(self):
-        self.beat_template_1()
+        try:
+            self.beat_template_1()
+        except ValueError as e:
+            # TODO 166 raise ValueError('while slicing: ibi model len_max limit assumption violated.')
+            raise QsqiError(e)
         self.template = self.beat_template_2()
         self.template_kurtosis = kurtosis(self.template)
         self.template_skewness = skewness(self.template)
