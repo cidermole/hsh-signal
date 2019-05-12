@@ -19,7 +19,9 @@ class AlivecorFilter(SourceBlock):
         self.hilbert = Hilbert()
         # roughly center on the observed 18.8 kHz carrier
         self.pll = PLL(loop_bw=1500, max_freq=21000, min_freq=17000, sampling_rate=self.sampling_rate)
+        # remove electrical noise:
         self.lowpass = Lowpass(cutoff_freq=100, transition_width=5, sampling_rate=self.sampling_rate)
+        # reject mains noise: (Note that for the US, you may need to change this filter to 60 Hz.)
         self.bandreject = Bandreject(low_cutoff_freq=40, high_cutoff_freq=60, transition_width=3, sampling_rate=self.sampling_rate)
         #Logger.debug('lowpass taps={}, bandreject taps={}'.format(self.lowpass._ntaps, self.bandreject._ntaps))
 
