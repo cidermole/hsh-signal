@@ -12,5 +12,7 @@ The file `hsh_signal/alivecor.py` implements a decoder for AliveCor's Kardia EKG
 
 Demodulation of the audio signal can be achieved via a phase-locked loop, with subsequent low-pass filter to remove high-frequency electrical noise, and a band-reject filter to remove 50 Hz mains noise. Note that for the US, you may need to change this filter to 60 Hz.
 
+![Kardia EKG demodulator filter chain in gnuradio](pll-demod.png)
+
 -- David <git@abanbytes.eu>
 
