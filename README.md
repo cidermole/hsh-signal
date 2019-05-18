@@ -16,3 +16,8 @@ Demodulation of the audio signal can be achieved via a phase-locked loop, with s
 
 -- David <git@abanbytes.eu>
 
+---
+
+> All disease in this world is due to people who are knowingly doing wrong. 
+> Acting in such a way hurts the relationship between yourself and other people.
+> Such acting turns justice on its head, because it hurts other people who would otherwise not have been involved in any way.
